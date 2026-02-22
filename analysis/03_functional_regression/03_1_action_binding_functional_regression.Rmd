@@ -1,0 +1,197 @@
+# Action binding
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(glmnet)
+library(readr)
+library(ggh4x)
+proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
+knitr::opts_knit$set(root.dir = proj_root)
+```
+
+## Model results
+### Functions
+```{r}
+# Required functions
+source("analysis/03_functional_regression/elasticnet_functions.R")
+```
+
+### Inputs
+```{r}
+# Required inputs
+name_binding <- "vaa_iaa_binding"
+name_condition   <- "vaa_iaa"
+
+brain_csv   <- "data/03_functional_regression/meg_action_difference.csv"
+binding_csv <- "data/03_functional_regression/perceptual_shift_difference.csv"
+
+out_filtered_csv <- "results/03_functional_regression/action_binding.csv"
+
+```
+
+### Settings
+```{r}
+# Time range in ms
+time_lower_ms <- 0
+time_upper_ms <- 1000
+time_windows_ms <- c(10, 20, 40)
+
+# ElasticNet alpha grid for glmnet
+alpha_grid <- seq(0.1, 1.0, by = 0.1)
+
+# glmnet settings
+n_lambda <- 100
+intercepts <- c(TRUE, FALSE)
+
+```
+
+
+### Run
+```{r}
+# 1) Read data
+brain_long <- read_csv(brain_csv, locale = locale(encoding = "UTF-8")) %>%
+  filter(condition == name_condition) %>%
+  mutate(region = make_region_label(region))
+
+binding_df <- read_csv(binding_csv, locale = locale(encoding = "UTF-8")) %>%
+  select(subject, all_of(name_binding))
+
+# 2) Build binned features
+feature_df <- prep_brain_features(
+  brain_long = brain_long,
+  time_windows_ms = time_windows_ms,
+  time_lower_ms = time_lower_ms,
+  time_upper_ms = time_upper_ms
+)
+
+# Optional: restrict to target regions
+regions <- sort(unique(feature_df$region))
+
+# 3) Fit ElasticNet grid (all lambdas)
+all_models <- run_elasticnet_grid(
+  feature_df = feature_df,
+  binding_df = binding_df,
+  regions = regions,
+  time_windows_ms = time_windows_ms,
+  alpha_grid = alpha_grid,
+  intercepts = intercepts,
+  binding_col = name_binding,
+  n_lambda = n_lambda
+)
+
+# saveRDS(all_models, out_all_rds)
+
+# 4) Filter by consecutive constraint
+# Consecutive constraint for filtering
+conti_p_list <- list(
+  'AG-R' = list("10" = 3, "20" = 3, "40" = 3),
+  'DLPFC-R' = list("10" = 4, "20" = 5, "40" = 3),
+  'Insula-R' = list("10" = 3, "20" = 3, "40" = 3),
+  "SMA-R"    = list("10" = 9, "20" = 4, "40" = 3),
+  "PreSMA-R" = list("10" = 6, "20" = 5, "40" = 3),
+  "PreSMA-L" = list("10" = 9, "20" = 5, "40" = 3)
+)
+
+filtered_models <- filter_elasticnet_by_consecutive(
+  all_models_df = all_models,
+  conti_p_list = conti_p_list,
+  time_lower_ms = time_lower_ms,
+  time_upper_ms = time_upper_ms,
+  consecutive_mode = "strict"
+)
+
+# 5) Post-filter by sparsity + overlap-run constraint
+# - Sparsity: per time_window (10/20/40 ms), total selected duration <= 200 ms
+# - Overlap-run: the triple-overlap (10 & 20 & 40) contains a continuous run >= 40 ms
+#   allowing up to 1–2 missing 10-ms bins (controlled by allowed_gap_bins)
+filtered_models_final <- post_filter_sparse_and_overlap_run(
+  filtered_models = filtered_models,
+  time_windows = c(10, 20, 40),
+  max_window_ms = 240,
+  min_overlap_run_ms = 50,
+  allowed_gap_bins = 2
+) %>% 
+    mutate(
+  coef = pmap_dbl(list(coef, time_window), function(x, y) x/(as.numeric(y)/10))
+    ) %>% 
+  select(region,time_window,lower,upper,coef)
+
+
+# Related ROI
+unique(filtered_models_final$region)
+```
+
+### Save
+```{r}
+write_csv(filtered_models_final, out_filtered_csv)
+
+cat("Saved:\n", out_filtered_csv, "\n")
+```
+
+
+## Plot
+### Functions
+```{r}
+source("analysis/03_functional_regression/fun_plot_functional_regression.R")
+```
+
+
+### Inputs
+```{r}
+out_pdf <- "figures/03_functional_regression/action_binding.pdf"
+meg_mean_name <- 'data/03_functional_regression/plot_data/meg_mean_action.csv'
+
+
+
+df_meg_mean <- read_csv(meg_mean_name, locale = locale(encoding = "UTF-8"))
+regions_name <- c("SMA-R", "PreSMA-R", "PreSMA-L")
+
+border_df <- tibble(
+  region = c("SMA-R", "PreSMA-R", "PreSMA-L"),
+  xmin = c(180, 190, 200),
+  xmax = c(260, 250, 290)
+)
+```
+
+### Run
+```{r}
+p_top <- plot_top_overlap_panel(
+  df_meg_mean = df_meg_mean,
+  coef_df = filtered_models_final,
+  regions_name = regions_name,
+  time_min = 0,
+  time_max = 1000
+)
+
+p_bottom <- plot_bottom_nested(
+  df_meg_mean = df_meg_mean,
+  coef_df = filtered_models_final,
+  border_df = border_df,
+  smooth_span = c("SMA-R"=0.75,"PreSMA-R"=0.40,"PreSMA-L"=0.75),
+  x_break = seq(180, 280, by = 20),
+ style = list(line_colors=c('iaa_bi'="#42a5f5",'vaa_ba'="#344fac",'vaa_iaa'="#ff4d6d"),
+   coef_shapes  = c("vaa_ba"=NA,"iaa_bi"=NA,"vaa_iaa"=NA),
+   linetype_map=c("vaa_ba"="dashed","iaa_bi"="dashed","vaa_iaa"="solid")
+   )
+)
+
+# ----------------------------
+# Combine
+# ----------------------------
+full_plot <- (p_top / p_bottom) + patchwork::plot_layout(nrow = 2, heights = c(1.4, 1))
+```
+
+
+### Save
+```{r}
+ggsave(out_pdf, plot = full_plot,width = 12, height = 8, units = "in",device = cairo_pdf, family =  "Arial")
+
+```
+

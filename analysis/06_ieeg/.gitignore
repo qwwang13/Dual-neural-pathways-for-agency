@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.Ruserdata
+*_cache
+.RDataTmp
+debug.R
+pic/
+DATA/
+*_files/*
+LOG
+*.rds
+mytask.pbs

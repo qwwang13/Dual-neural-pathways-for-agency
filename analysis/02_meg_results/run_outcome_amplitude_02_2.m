@@ -1,0 +1,39 @@
+% run_outcome_amplitude.m
+clear; clc;
+
+here = fileparts(mfilename('fullpath'));
+repo = fileparts(fileparts(here));
+
+dirData = fullfile(repo,'data', '02_meg_results');
+dirOut  = fullfile(repo,'figures', '02_meg_results');
+
+roi6_outcome = {'PrecuneusR','MTGR','PostcentralL','SPGL','PrecentralR','PostcentralR'};
+roi12 = {'AGR','PreSMAL','PreSMAR','SMAR','DLPFCR','InsulaR','PrecuneusR','MTGR','PostcentralL','SPGL','PrecentralR','PostcentralR'};
+
+common = struct();
+common.xTicks   = -200:200:1000;
+common.viewAzEl = [50 25];
+common.baseZ    = 0;
+common.reverseZ = true;
+
+% ---- 6 ROI ----
+plot3d_tc_from_csv( ...
+    fullfile(dirData,'ta_outcome_vs_6.csv'), roi6_outcome, ...
+    fullfile(dirOut,'outcome_binding_vs_6.pdf'), ...
+    zLim=[-3 3],titleStr="Voluntary"  ); 
+
+plot3d_tc_from_csv( ...
+    fullfile(dirData,'ta_outcome_is_6.csv'), roi6_outcome, ...
+    fullfile(dirOut,'outcome_binding_is_6.pdf'), ...
+    zLim=[-3 3],titleStr="Involuntary"); 
+
+% ---- 12 ROI ----
+plot3d_tc_from_csv( ...
+    fullfile(dirData,'ta_outcome_vs_12.csv'), roi12, ...
+    fullfile(dirOut,'outcome_binding_vs_12.pdf'), ...
+    zLim=[-3 3],titleStr="Voluntary" ); 
+
+plot3d_tc_from_csv( ...
+    fullfile(dirData,'ta_outcome_is_12.csv'), roi12, ...
+    fullfile(dirOut,'outcome_binding_is_12.pdf'), ...
+    zLim=[-3 3],titleStr="Involuntary"); 

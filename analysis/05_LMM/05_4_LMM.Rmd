@@ -1,0 +1,889 @@
+# LMM
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE
+)
+  library(readr)
+  library(dplyr)
+  library(tidyr)
+  library(purrr)
+  library(stringr)
+  library(lme4)
+  library(lmerTest)
+  library(ggplot2)
+  library(ggeffects)
+  library(ggnewscale) 
+  library(patchwork)
+proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
+knitr::opts_knit$set(root.dir = proj_root)
+```
+
+## Input functions
+```{r}
+source('analysis/05_LMM/fun_lmm_split.R') # LMM function
+source('analysis/05_LMM/fun_plot_lmm_split.R') # plot function
+```
+
+
+## Action binding
+### Model results
+#### RUN
+```{r}
+behavior_csv <- "data/05_LMM/behavior_single_trial.csv"
+
+roi_files_action <- list(
+  PreSMAL = "data/05_LMM/feature/PreSMAL_action_ba.csv",
+  PreSMAR = "data/05_LMM/feature/PreSMAR_action_ba.csv",
+  SMAR    = "data/05_LMM/feature/SMAR_action_ba.csv"
+)
+
+res_list_action <- lapply(names(roi_files_action), function(roi) {
+
+  res <- run_lmm_split(
+    feature_csv = roi_files_action[[roi]],
+    behavior_csv = behavior_csv,
+    scale_features = TRUE,
+    condition_levels = c("va_a","ia_a"),
+    exclude_subjects = c(19)
+  )
+  res
+})
+names(res_list_action) <- names(roi_files_action)
+
+
+wide_all_action <- bind_rows(lapply(names(res_list_action), function(roi) {
+  res_list_action[[roi]]$fixed_table_wide %>%
+    mutate(ROI = roi, .before = 1)
+}))
+
+wide_all_action
+```
+
+#### Save
+```{r}
+write_csv(
+  wide_all_action,
+  file.path("results/05_LMM", "action_binding.csv")
+)
+```
+
+
+### Plot
+
+#### RUN
+```{r}
+# =========================
+# Build p value plots
+# =========================
+# =========================
+
+res_PreSMAL <- res_list_action$PreSMAL
+res_PreSMAR <- res_list_action$PreSMAR
+res_SMAR    <- res_list_action$SMAR
+
+terms_keep_action <- c("meanAmplitude","Theta_bandPower","Alpha_bandITPC","Theta_bandITPC")
+
+p_forest_SMAR <- plot_forest_vertical_split(
+  split_res = res_SMAR,
+  dodge_width = 0.50,
+  point_size = 5,
+  line_width = 2,
+  terms_select = terms_keep_action
+)
+
+p_forest_PreSMAR <- plot_forest_vertical_split(
+  split_res = res_PreSMAR,
+  dodge_width = 0.50,
+  point_size = 5,
+  line_width = 2,
+  terms_select = terms_keep_action
+)
+
+p_forest_PreSMAL <- plot_forest_vertical_split(
+  split_res = res_PreSMAL,
+  dodge_width = 0.50,
+  point_size = 5,
+  line_width = 2,
+  terms_select = terms_keep_action
+)
+
+Fig_p_value_action <- (p_forest_SMAR / p_forest_PreSMAR / p_forest_PreSMAL) +
+  plot_layout(guides = "collect") +
+  plot_annotation(theme = theme(legend.position = "top"))
+
+Fig_p_value_action
+
+
+```
+
+```{r}
+# =========================
+# Build partial residual plots
+# =========================
+# =========================
+# PreSMAL
+# =========================
+fig_PreSMAL <- plot_partial_residual(
+  split_res = res_PreSMAL,
+  p_cut = 0.05,
+  xlim_list = list(
+    meanAmplitude  = c(-1.5, 1.5),
+    Theta_bandITPC = c(-2, 3)
+  ),
+  point_colors  = c(va_a = "#bc3908", ia_a = "#1F77B4"),
+  line_colors   = c(va_a = "#fb8500", ia_a = "#08519C"),
+  ribbon_colors = c(va_a = "#ffd29d", ia_a = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(va_a = "Voluntary", ia_a = "Involuntary"),
+  legend_position_list = list(
+    meanAmplitude  = c(0.5, 0.98),
+    Theta_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    meanAmplitude  = -1.5,
+    Theta_bandITPC = 0
+  ),
+  annotate_y = list(
+    meanAmplitude  = -15,
+    Theta_bandITPC = -25
+  ),
+  line_types = c(va_a = "solid", ia_a = "dashed"),
+  point_shapes = c(va_a = 16, ia_a = 17)
+)
+
+
+# =========================
+# PreSMAR
+# =========================
+fig_PreSMAR <- plot_partial_residual(
+  split_res = res_PreSMAR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Alpha_bandITPC = c(-2, 2)
+  ),
+  point_colors  = c(va_a = "#bc3908", ia_a = "#1F77B4"),
+  line_colors   = c(va_a = "#fb8500", ia_a = "#08519C"),
+  ribbon_colors = c(va_a = "#ffd29d", ia_a = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(va_a = "Voluntary", ia_a = "Involuntary"),
+  legend_position_list = list(
+    Alpha_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Alpha_bandITPC = 0
+  ),
+  annotate_y = list(
+    Alpha_bandITPC = -40
+  ),
+  line_types = c(va_a = "solid", ia_a = "dashed"),
+  point_shapes = c(va_a = 16, ia_a = 17)
+)
+
+
+# =========================
+# SMAR
+# =========================
+fig_SMAR <- plot_partial_residual(
+  split_res = res_SMAR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Theta_bandPower  = c(-1.5, 1.5)
+  ),
+  point_colors  = c(va_a = "#bc3908", ia_a = "#1F77B4"),
+  line_colors   = c(va_a = "#fb8500", ia_a = "#08519C"),
+  ribbon_colors = c(va_a = "#ffd29d", ia_a = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(va_a = "Voluntary", ia_a = "Involuntary"),
+  legend_position_list = list(
+    Theta_bandPower = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Theta_bandPower = 0
+  ),
+  annotate_y = list(
+    Theta_bandPower = -40
+  ),
+  line_types = c(va_a = "solid", ia_a = "dashed"),
+  point_shapes = c(va_a = 16, ia_a = 17)
+)
+
+p_overlay_SMAR <- plot_split_term_overlay(
+  split_res = res_SMAR,
+  term = "Alpha_bandITPC",
+  conditions = c("va_a", "ia_a"),
+  xlim = c(-3, 3),
+  subj_mean_points = TRUE,
+  line_width = 2,
+  point_size = 5,
+  point_alpha = 1,
+  point_colors  = c(va_a = "#bc3908", ia_a = "#1F77B4"),
+  line_colors   = c(va_a = "#fb8500", ia_a = "#08519C"),
+  ribbon_colors = c(va_a = "#ffd29d", ia_a = "#BDD7E7"),
+  ribbon_alpha  = 0.3,
+  point_label = c(va_a = "Voluntary", ia_a = "Involuntary"),
+  legend_position = c(0.02, 0.98),
+  legend_title = NULL,
+  point_shapes = c(va_a = 16, ia_a = 17),
+  line_types   = c(va_a = "solid", ia_a = "dashed"),
+  add_annot = TRUE,
+  annotate_x = -2,
+  annotate_y = 150
+)
+
+
+p_overlay_SMAR_leg <- p_overlay_SMAR + theme(legend.position = "top")
+
+# Turn off legends in the single-condition plots lists
+fig_SMAR_noleg    <- lapply(fig_SMAR,    \(p) p + theme(legend.position = "none") + guides(color="none", fill="none", shape="none"))
+fig_PreSMAR_noleg <- lapply(fig_PreSMAR, \(p) p + theme(legend.position = "none") + guides(color="none", fill="none", shape="none"))
+fig_PreSMAL_noleg <- lapply(fig_PreSMAL, \(p) p + theme(legend.position = "none") + guides(color="none", fill="none", shape="none"))
+# =========================
+# Assemble the same layout as before
+# (pick plots by name; each name is "condition_term")
+# =========================
+Row1_action <-  (fig_SMAR_noleg[[3]] + labs(y = "Partial Residuals")) | p_overlay_SMAR_leg
+Row2_action <- (fig_PreSMAR_noleg[[1]] + labs(y = "Partial Residuals")) | plot_spacer()
+Row3_action <- (fig_PreSMAL_noleg[[2]] + labs(y = "Partial Residuals")) | (fig_PreSMAL_noleg[[1]])
+
+Fig_partial_action <- (Row1_action / Row2_action / Row3_action) +
+  plot_layout(guides = "collect", widths = c(1, 1)) +
+  plot_annotation(theme = theme(legend.position = "top"))
+
+Fig_partial_action
+
+ggsave(
+  filename = "figures/05_LMM/LMM/action_binding_Partia_Residuals.pdf",
+  plot = Fig_partial_action,
+  width = 13,
+  height = 18,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+```
+
+#### Save
+```{r}
+# figure of p value
+ggsave(
+  filename = "figures/05_LMM/LMM/action_binding_p_value.pdf",
+  plot = Fig_p_value_action,
+  width = 6.5,
+  height = 18,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+
+# figure of partia residuals
+ggsave(
+  filename = "figures/05_LMM/LMM/action_binding_Partia_Residuals.pdf",
+  plot = Fig_partial_action,
+  width = 13,
+  height = 18,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+```
+
+
+## Outcome binding
+### Model results
+#### RUN
+```{r}
+behavior_csv <- "data/05_LMM/behavior_single_trial.csv"
+
+roi_files_outcome <- list(
+  PostcentralL = "data/05_LMM/feature/PostcentralL_outcome_bs.csv",
+  MTGR         = "data/05_LMM/feature/MTGR_outcome_bs.csv"
+)
+
+res_list_outcome <- lapply(names(roi_files_outcome), function(roi) {
+  run_lmm_split(
+    feature_csv = roi_files_outcome[[roi]],
+    behavior_csv = behavior_csv,
+    scale_features = TRUE,
+    condition_levels = c("vs_s","is_s"),
+    exclude_subjects = NULL
+  )
+})
+names(res_list_outcome) <- names(roi_files_outcome)
+
+wide_all_outcome <- bind_rows(lapply(names(res_list_outcome), function(roi) {
+  res_list_outcome[[roi]]$fixed_table_wide %>%
+    mutate(ROI = roi, .before = 1)
+}))
+
+wide_all_outcome
+```
+
+
+#### Save
+```{r}
+write_csv(
+  wide_all_outcome,
+  file.path("results/05_LMM", "outcome_binding.csv")
+)
+```
+
+
+
+
+### Plot
+#### RUN
+
+```{r}
+res_PostcentralL <- res_list_outcome$PostcentralL
+res_MTGR         <- res_list_outcome$MTGR
+
+terms_keep_outcome <- c("Alpha_bandPower","Delta_bandITPC","Theta_bandITPC")
+
+p_forest_PostcentralL <- plot_forest_vertical_split(
+  split_res = res_PostcentralL,
+  conditions = c("vs_s","is_s"),
+  cond_labels = c(vs_s = "Voluntary", is_s = "Involuntary"),
+  terms_select = terms_keep_outcome,
+  dodge_width = 0.50,
+  point_size = 5,
+  line_width = 2
+)
+
+p_forest_MTGR <- plot_forest_vertical_split(
+  split_res = res_MTGR,
+  conditions = c("vs_s","is_s"),
+  cond_labels = c(vs_s = "Voluntary", is_s = "Involuntary"),
+  terms_select = terms_keep_outcome,
+  dodge_width = 0.50,
+  point_size = 5,
+  line_width = 2,
+  h_value = 0.5
+)
+
+Fig_p_value_outcome <- (p_forest_PostcentralL / p_forest_MTGR) +
+  plot_layout(guides = "collect") +
+  plot_annotation(theme = theme(legend.position = "top"))
+
+Fig_p_value_outcome
+```
+
+
+```{r}
+# -------------------------
+# Build partial-residual plot lists
+# -------------------------
+fig_PostcentralL <- plot_partial_residual(
+  split_res = res_PostcentralL,
+  p_cut = 0.05,
+  xlim_list = list(
+    Alpha_bandPower = c(-1, 3)
+  ),
+  point_colors  = c(vs_s = "#bc3908", is_s = "#1F77B4"),
+  line_colors   = c(vs_s = "#fb8500", is_s = "#08519C"),
+  ribbon_colors = c(vs_s = "#ffd29d", is_s = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(vs_s = "Voluntary", is_s = "Involuntary"),
+  legend_position_list = list(
+    Alpha_bandPower = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Alpha_bandPower = 1
+  ),
+  annotate_y = list(
+    Alpha_bandPower = -50
+  ),
+  line_types = c(vs_s = "solid", is_s = "dashed"),
+  point_shapes = c(vs_s = 16, is_s = 17)
+)
+
+fig_MTGR <- plot_partial_residual(
+  split_res = res_MTGR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Delta_bandITPC = c(-1.5, 2.5),
+    Theta_bandITPC = c(-2, 3)
+  ),
+  point_colors  = c(vs_s = "#bc3908", is_s = "#1F77B4"),
+  line_colors   = c(vs_s = "#fb8500", is_s = "#08519C"),
+  ribbon_colors = c(vs_s = "#ffd29d", is_s = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(vs_s = "Voluntary", is_s = "Involuntary"),
+  legend_position_list = list(
+    Delta_bandITPC = c(0.5, 0.98),
+    Theta_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Delta_bandITPC = -1,
+    Theta_bandITPC = -2
+  ),
+  annotate_y = list(
+    Delta_bandITPC = 150,
+    Theta_bandITPC = -300
+  ),
+  line_types = c(vs_s = "solid", is_s = "dashed"),
+  point_shapes = c(vs_s = 16, is_s = 17)
+)
+
+# -------------------------
+# Turn off legends (we will collect one legend at the top)
+# -------------------------
+fig_PostcentralL_noleg <- lapply(fig_PostcentralL, \(p) p + guides(color = "none", fill = "none", shape = "none"))
+fig_MTGR_noleg         <- lapply(fig_MTGR,         \(p) p + guides(color = "none", fill = "none", shape = "none"))
+
+# -------------------------
+# Assemble (Outcome partial residual layout)
+# Row1: PostcentralL | spacer
+# Row2: MTGR[[1]] | MTGR[[2]]
+# -------------------------
+Row1_outcome <- (fig_PostcentralL[[1]] + labs(y = "Partial Residuals")) | plot_spacer()
+Row2_outcome <- (fig_MTGR_noleg[[1]] + labs(y = "Partial Residuals")) | fig_MTGR_noleg[[2]]
+
+Fig_outcome_partial <- (Row1_outcome / Row2_outcome) +
+  plot_layout(guides = "collect", widths = c(1, 1)) +
+  plot_annotation(theme = theme(legend.position = "top"))
+
+Fig_outcome_partial
+```
+
+
+#### Save
+```{r}
+ggsave(
+  filename = "figures/05_LMM/LMM/outcome_binding_p_value.pdf",
+  plot = Fig_p_value_outcome,
+  width = 6.5,
+  height = 12,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+
+ggsave(
+  filename = "figures/05_LMM/LMM/outcome_binding_Partial_Residuals.pdf",
+  plot = Fig_outcome_partial,
+  width = 13,
+  height = 12,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+```
+
+
+
+## 75 and 50 without outcome
+### Model results
+#### RUN
+```{r}
+behavior_csv <- "data/05_LMM/behavior_single_trial.csv"
+
+roi_files_75_50 <- list(
+  PrecuneusR = "data/05_LMM/feature/PrecuneusR_75_50_ba.csv",
+  AGR        = "data/05_LMM/feature/AGR_75_50_ba.csv",
+  DLPFCR     = "data/05_LMM/feature/DLPFCR_75_50_ba.csv"
+)
+
+res_list_75_50 <- lapply(names(roi_files_75_50), function(roi) {
+  run_lmm_split(
+    feature_csv = roi_files_75_50[[roi]],
+    behavior_csv = behavior_csv,
+    scale_features = TRUE,
+    condition_levels = c("a75_an","a50_an"),
+    exclude_subjects = NULL
+  )
+})
+names(res_list_75_50) <- names(roi_files_75_50)
+
+wide_all_75_50 <- bind_rows(lapply(names(res_list_75_50), function(roi) {
+  res_list_75_50[[roi]]$fixed_table_wide %>%
+    mutate(ROI = roi, .before = 1)
+}))
+
+wide_all_75_50
+```
+
+
+#### Save
+```{r}
+write_csv(
+  wide_all_75_50,
+  file.path("results/05_LMM", "75_50_without_outcome.csv")
+)
+```
+
+
+
+
+### Plot
+
+#### RUN
+```{r}
+res_PrecuneusR <- res_list_75_50$PrecuneusR
+res_AGR        <- res_list_75_50$AGR
+res_DLPFCR     <- res_list_75_50$DLPFCR
+
+terms_keep_75_50 <- c("Theta_bandPower","Alpha_bandITPC","Delta_bandITPC")
+
+p_forest_PrecuneusR <- plot_forest_vertical_split(
+  split_res = res_PrecuneusR,
+  conditions = c("a75_an","a50_an"),
+  cond_labels = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  point_colors = c("75% without outcome"="#bc3908", "50% without outcome"="#1F77B4"),
+  point_shapes = c("75% without outcome"=16, "50% without outcome"=17),
+  line_types   = c("75% without outcome"="solid", "50% without outcome"="dashed"),  
+  
+  terms_select = terms_keep_75_50,
+  dodge_width = 0.5,
+  point_size = 5,
+  line_width = 2,
+  h_value = 0.3
+)
+
+p_forest_AGR <- plot_forest_vertical_split(
+  split_res = res_AGR,
+  conditions = c("a75_an","a50_an"),
+  cond_labels = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  point_colors = c("75% without outcome"="#bc3908", "50% without outcome"="#1F77B4"),
+  point_shapes = c("75% without outcome"=16, "50% without outcome"=17),
+  line_types   = c("75% without outcome"="solid", "50% without outcome"="dashed"),  
+  terms_select = terms_keep_75_50,
+  dodge_width = 0.5,
+  point_size = 5,
+  line_width = 2,
+  h_value = 0.3
+)
+
+p_forest_DLPFCR <- plot_forest_vertical_split(
+  split_res = res_DLPFCR,
+  conditions = c("a75_an","a50_an"),
+  cond_labels = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  point_colors = c("75% without outcome"="#bc3908", "50% without outcome"="#1F77B4"),
+  point_shapes = c("75% without outcome"=16, "50% without outcome"=17),
+  line_types   = c("75% without outcome"="solid", "50% without outcome"="dashed"),  
+  terms_select = terms_keep_75_50,
+  dodge_width = 0.5,
+  point_size = 5,
+  line_width = 2,
+  h_value = 0.3
+)
+
+Fig_p_value_75_50 <- ((p_forest_PrecuneusR / p_forest_AGR / p_forest_DLPFCR) +
+  plot_layout(guides = "collect")) &
+  theme(
+    legend.position = "top",
+    legend.direction = "vertical",
+    legend.box = "vertical"
+  )
+
+Fig_p_value_75_50
+```
+
+
+
+```{r}
+fig_PrecuneusR <- plot_partial_residual(
+  split_res = res_PrecuneusR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Delta_bandITPC = c(-2, 2.5),
+    Theta_bandPower = c(-1, 1)
+  ),
+  point_colors  = c(a75_an = "#bc3908", a50_an = "#1F77B4"),
+  line_colors   = c(a75_an = "#fb8500", a50_an = "#08519C"),
+  ribbon_colors = c(a75_an = "#ffd29d", a50_an = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  legend_position_list = list(
+    Delta_bandITPC = c(0.02, 0.98),
+    Theta_bandPower = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Delta_bandITPC = -2,
+    Theta_bandPower = -0.5
+  ),
+  annotate_y = list(
+    Delta_bandITPC = -50,
+    Theta_bandPower = -27
+  ),
+  line_types = c(a75_an = "solid", a50_an = "dashed"),
+  point_shapes = c(a75_an = 16, a50_an = 17)
+)
+
+fig_AGR <- plot_partial_residual(
+  split_res = res_AGR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Delta_bandITPC = c(-3, 3)
+  ),
+  point_colors  = c(a75_an = "#bc3908", a50_an = "#1F77B4"),
+  line_colors   = c(a75_an = "#fb8500", a50_an = "#08519C"),
+  ribbon_colors = c(a75_an = "#ffd29d", a50_an = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  legend_position_list = list(
+    Delta_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Delta_bandITPC = -2
+  ),
+  annotate_y = list(
+    Delta_bandITPC = -100
+  ),
+  line_types = c(a75_an = "solid", a50_an = "dashed"),
+  point_shapes = c(a75_an = 16, a50_an = 17)
+)
+
+fig_DLPFCR <- plot_partial_residual(
+  split_res = res_DLPFCR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Alpha_bandITPC = c(-2, 3)
+  ),
+  point_colors  = c(a75_an = "#bc3908", a50_an = "#1F77B4"),
+  line_colors   = c(a75_an = "#fb8500", a50_an = "#08519C"),
+  ribbon_colors = c(a75_an = "#ffd29d", a50_an = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(a75_an = "75% without outcome", a50_an = "50% without outcome"),
+  legend_position_list = list(
+    Alpha_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Alpha_bandITPC = -2
+  ),
+  annotate_y = list(
+    Alpha_bandITPC = 100
+  ),
+  line_types = c(a75_an = "solid", a50_an = "dashed"),
+  point_shapes = c(a75_an = 16, a50_an = 17)
+)
+
+fig_PrecuneusR_noleg <- lapply(fig_PrecuneusR, \(p) p + guides(color = "none", fill = "none", shape = "none"))
+fig_AGR_noleg       <- lapply(fig_AGR,       \(p) p + guides(color = "none", fill = "none", shape = "none"))
+fig_DLPFCR_noleg    <- lapply(fig_DLPFCR,    \(p) p + guides(color = "none", fill = "none", shape = "none"))
+
+Row1_75_50 <- (fig_PrecuneusR[[2]] + labs(y = "Partial Residuals")) | fig_PrecuneusR_noleg[[1]]
+Row2_75_50 <- (fig_AGR[[1]] + labs(y = "Partial Residuals")) | plot_spacer()
+Row3_75_50 <- (fig_DLPFCR_noleg[[1]] + labs(y = "Partial Residuals")) | plot_spacer()
+
+Fig_75_50_partial <- (Row1_75_50 / Row2_75_50 / Row3_75_50) +
+  plot_layout(guides = "collect", widths = c(1, 1)) &
+  theme(
+    legend.position = "top",
+    legend.direction = "vertical",
+    legend.box = "vertical"
+  )
+
+Fig_75_50_partial
+```
+
+
+#### Save
+```{r}
+ggsave(
+  filename = "figures/05_LMM/LMM/75_50_p_value.pdf",
+  plot = Fig_p_value_75_50,
+  width = 6.5,
+  height = 18,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+
+ggsave(
+  filename = "figures/05_LMM/LMM/75_50_Partial_Residuals.pdf",
+  plot = Fig_75_50_partial,
+  width = 13,
+  height = 18,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+```
+
+
+
+
+## 50 with and without outcome
+### Model results
+#### RUN
+```{r}
+behavior_csv <- "data/05_LMM/behavior_single_trial.csv"
+
+roi_files_50_with_without <- list(
+  STGR = "data/05_LMM/feature/STGR_50_ba.csv"
+)
+
+res_list_50_with_without <- lapply(names(roi_files_50_with_without), function(roi) {
+  run_lmm_split(
+    feature_csv = roi_files_50_with_without[[roi]],
+    behavior_csv = behavior_csv,
+    scale_features = TRUE,
+    condition_levels = c("a50_ay","a50_an"),
+    exclude_subjects = NULL
+  )
+})
+names(res_list_50_with_without) <- names(roi_files_50_with_without)
+
+wide_all_50_with_without <- bind_rows(lapply(names(res_list_50_with_without), function(roi) {
+  res_list_50_with_without[[roi]]$fixed_table_wide %>%
+    mutate(ROI = roi, .before = 1)
+}))
+
+wide_all_50_with_without
+```
+
+
+#### Save
+```{r}
+write_csv(
+  wide_all_50_with_without,
+  file.path("results/05_LMM", "50_with_without_outcome.csv")
+)
+```
+
+
+
+
+### Plot
+#### RUN
+```{r}
+res_STGR <- res_list_50_with_without$STGR
+
+terms_keep_50_with_without <- c("meanAmplitude","Delta_bandITPC","Theta_bandITPC")
+
+p_forest_STGR <- plot_forest_vertical_split(
+  split_res = res_STGR,
+  conditions = c("a50_ay","a50_an"),
+  cond_labels = c(a50_ay = "50% with outcome", a50_an = "50% without outcome"),
+  point_colors = c("50% with outcome"="#bc3908", "50% without outcome"="#1F77B4"),
+  point_shapes = c("50% with outcome"=16, "50% without outcome"=17),
+  line_types=c("50% with outcome"="solid", "50% without outcome"="dashed"),
+  terms_select = terms_keep_50_with_without,
+  dodge_width = 0.5,
+  point_size = 5,
+  line_width = 2,
+  h_value = 0.3
+) +
+  theme(
+    legend.position = "top",
+    legend.direction = "vertical",
+    legend.box = "vertical"
+  )
+
+p_forest_STGR
+```
+
+
+```{r}
+fig_STGR <- plot_partial_residual(
+  split_res = res_STGR,
+  p_cut = 0.05,
+  xlim_list = list(
+    Delta_bandITPC = c(-2, 1),
+    meanAmplitude  = c(-2, 1),
+    Theta_bandITPC = c(-1.5, -0.5)
+  ),
+  point_colors  = c(a50_ay = "#bc3908", a50_an = "#1F77B4"),
+  line_colors   = c(a50_ay = "#fb8500", a50_an = "#08519C"),
+  ribbon_colors = c(a50_ay = "#ffd29d", a50_an = "#BDD7E7"),
+  point_size = 5,
+  line_width = 2,
+  ribbon_alpha = 0.3,
+  point_label = c(a50_ay = "50% with outcome", a50_an = "50% without outcome"),
+  legend_position_list = list(
+    Delta_bandITPC = c(0.02, 0.98),
+    meanAmplitude  = c(0.02, 0.98),
+    Theta_bandITPC = c(0.02, 0.98)
+  ),
+  point_alpha = 1,
+  annotate_x = list(
+    Delta_bandITPC = -2,
+    meanAmplitude  = -1,
+    Theta_bandITPC = -1.25
+  ),
+  annotate_y = list(
+    Delta_bandITPC = -100,
+    meanAmplitude  = -50,
+    Theta_bandITPC = -500
+  ),
+  line_types = c(a50_ay = "solid", a50_an = "dashed"),
+  point_shapes = c(a50_ay = 16, a50_an = 17)
+)
+
+fig_STGR_noleg <- lapply(fig_STGR, \(p) p + guides(color = "none", fill = "none", shape = "none"))
+
+Fig_50_with_without_partial <- (
+  (fig_STGR[[3]] + labs(y = "Partial Residuals")) |
+    fig_STGR[[1]] |
+    fig_STGR_noleg[[2]]
+) +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "top",
+    legend.direction = "vertical",
+    legend.box = "vertical"
+  )
+
+Fig_50_with_without_partial
+```
+
+
+
+
+#### Save
+```{r}
+ggsave(
+  filename = "figures/05_LMM/LMM/50_with_without_outcome_p_value.pdf",
+  plot = p_forest_STGR,
+  width = 6.5,
+  height = 6,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+
+
+ggsave(
+  filename = "figures/05_LMM/LMM/50_with_without_outcome_Partial_Residuals.pdf",
+  plot = Fig_50_with_without_partial,
+  width = 18,
+  height = 6,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
+```
+
+
+
+
+
+
+
+
+

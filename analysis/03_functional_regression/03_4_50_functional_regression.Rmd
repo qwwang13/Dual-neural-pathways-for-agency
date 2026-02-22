@@ -1,0 +1,205 @@
+# 50% with and without outcome
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE
+)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(glmnet)
+library(readr)
+library(ggh4x)
+proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
+knitr::opts_knit$set(root.dir = proj_root)
+```
+
+## Model results
+### Functions
+```{r}
+# Required functions
+source("analysis/03_functional_regression/elasticnet_functions.R")
+```
+
+### Inputs
+```{r}
+# Required inputs
+name_binding <- "a50_ay_an_binding"
+name_condition   <- "a50_ay_an"
+
+brain_csv   <- "data/03_functional_regression/meg_probability_difference.csv"
+binding_csv <- "data/03_functional_regression/perceptual_shift_difference.csv"
+
+out_filtered_csv <- "results/03_functional_regression/50_with_without_outcome.csv"
+
+```
+
+### Settings
+```{r}
+# Time range in ms
+time_lower_ms <- 0
+time_upper_ms <- 1500
+time_windows_ms <- c(10, 20, 40)
+
+# ElasticNet alpha grid for glmnet
+alpha_grid <- seq(0.1, 1.0, by = 0.1)
+
+# glmnet settings
+n_lambda <- 100
+intercepts <- c(TRUE, FALSE)
+
+```
+
+
+### Run
+```{r}
+# 1) Read data
+brain_long <- read_csv(brain_csv, locale = locale(encoding = "UTF-8")) %>%
+  filter(condition == name_condition) %>%
+  mutate(region = make_region_label(region))
+
+binding_df <- read_csv(binding_csv, locale = locale(encoding = "UTF-8")) %>%
+  select(subject, all_of(name_binding))
+
+# 2) Build binned features
+feature_df <- prep_brain_features(
+  brain_long = brain_long,
+  time_windows_ms = time_windows_ms,
+  time_lower_ms = time_lower_ms,
+  time_upper_ms = time_upper_ms
+)
+
+# Optional: restrict to target regions
+regions <- sort(unique(feature_df$region))
+
+# 3) Fit ElasticNet grid (all lambdas)
+all_models <- run_elasticnet_grid(
+  feature_df = feature_df,
+  binding_df = binding_df,
+  regions = regions,
+  time_windows_ms = time_windows_ms,
+  alpha_grid = alpha_grid,
+  intercepts = intercepts,
+  binding_col = name_binding,
+  n_lambda = n_lambda
+)
+
+
+# 4) Filter by consecutive constraint
+# Consecutive constraint for filtering
+conti_p_list <- list(
+  'AG-R' = list("10" = 4, "20" = 3, "40" = 3),
+  'DLPFC-R' = list("10" = 4, "20" = 3, "40" = 3),
+  'Insula-R' = list("10" = 4, "20" = 3, "40" = 3),
+  "SMA-R"    = list("10" = 4, "20" = 3, "40" = 3),
+  "PreSMA-R" = list("10" = 4, "20" = 3, "40" = 3),
+  "PreSMA-L" = list("10" = 4, "20" = 3, "40" = 3),
+  'Postcentral-L' = list("10" = 4, "20" = 3, "40" = 3),    
+  'MTG-R' = list("10" = 4, "20" = 3, "40" = 3),
+  'Precuneus-R' = list("10" = 4, "20" = 3, "40" = 3), 
+  'Precentral-R' = list("10" = 4, "20" = 3, "40" = 3),
+  'Postcentral-R' = list("10" = 4, "20" = 3, "40" = 3),
+  'SPG-L' = list("10" = 4, "20" = 3, "40" = 3),
+  'STG-R' = list("10" = 4, "20" = 3, "40" = 3)
+)
+
+filtered_models <- filter_elasticnet_by_consecutive(
+  all_models_df = all_models,
+  conti_p_list = conti_p_list,
+  time_lower_ms = time_lower_ms,
+  time_upper_ms = time_upper_ms,
+  consecutive_mode = "strict"
+)
+
+# 5) Post-filter by sparsity + overlap-run constraint
+# - Sparsity: per time_window (10/20/40 ms), total selected duration <= 200 ms
+# - Overlap-run: the triple-overlap (10 & 20 & 40) contains a continuous run >= 40 ms
+#   allowing up to 1–2 missing 10-ms bins (controlled by allowed_gap_bins)
+filtered_models_final <- post_filter_sparse_and_overlap_run(
+  filtered_models = filtered_models,
+  time_windows = c(10, 20, 40),
+  max_window_ms = 140,
+  min_overlap_run_ms = 30,
+  allowed_gap_bins = 0
+) %>% 
+    mutate(
+  coef = pmap_dbl(list(coef, time_window), function(x, y) x/(as.numeric(y)/10))
+    ) %>% 
+  select(region,time_window,lower,upper,coef)
+
+# Related ROI
+unique(filtered_models_final$region)
+```
+
+### Save
+```{r}
+write_csv(filtered_models_final, out_filtered_csv)
+
+cat("Saved:\n", out_filtered_csv, "\n")
+```
+
+
+## Plot
+
+### Functions
+```{r}
+source("analysis/03_functional_regression/fun_plot_functional_regression.R")
+```
+
+
+### Inputs
+```{r}
+out_pdf <- "figures/03_functional_regression/50_with_without_outcome.pdf"
+meg_mean_name <- 'data/03_functional_regression/plot_data/meg_mean_50.csv'
+
+
+
+df_meg_mean <- read_csv(meg_mean_name, locale = locale(encoding = "UTF-8"))
+regions_name <- c('STG-R')
+
+border_df <- tibble(
+    region = c('STG-R'),
+    xmin = c(600),
+    xmax = c(640)
+)
+```
+
+### Run
+```{r}
+p_left <- plot_left_overlap_panel_50(
+  df_meg_mean = df_meg_mean,
+  coef_df = filtered_models_final,
+  regions_name = regions_name,
+  time_min = 0,
+  time_max = 1500,
+  desired_order_condition = c("a50_ay_ba","a50_an_ba","a50_ay_an"),
+ style = list(overlap_fill = c("1"="grey90","2"="grey80","3"="grey40"),
+  line_colors  = c('a50_an_ba'="#42a5f5",'a50_ay_ba'="#344fac",'a50_ay_an'="#ff4d6d"),
+  line_lty     = c('a50_an_ba'=5,'a50_ay_ba'=5,'a50_ay_an'=1),
+  line_labels  = c('a50_an_ba'="50% probability\n(without outcome)",'a50_ay_ba'="50% probability\n(with outcome)",'a50_ay_an'="Difference")
+                                   )
+)
+
+p_right <- plot_right_nested_50(
+  df_meg_mean = df_meg_mean,
+  coef_df = filtered_models_final,
+  border_df = border_df,
+  smooth_span = c('STG-R'=0.4),
+  x_break = seq(0, 1500, by = 40)
+)
+
+# ----------------------------
+# Combine
+# ----------------------------
+full_plot <-  p_left + p_right + plot_layout(nrow = 1, widths = c(1, 1.2))
+```
+
+
+### Save
+```{r}
+ggsave(out_pdf, plot = full_plot,width = 13, height = 4, units = "in",device = cairo_pdf, family =  "Arial")
+
+```
+
