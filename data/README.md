@@ -63,37 +63,12 @@ Involuntary:
 
 ------------------------------------------------------------------------
 
-### Probability Manipulation (MEG)
-
-75% with outcome:
-
--   `a75_ay_ba`
-
-75% without outcome:
-
--   `a75_an_ba`
--   `a75_an`
-
-50% with outcome:
-
--   `a50_ay_ba`
--   `a50_ay`
-
-50% without outcome:
-
--   `a50_an_ba`
--   `a50_an`
-
-------------------------------------------------------------------------
-
 ### Difference Conditions (Baseline-Corrected Contrasts)
 
 These conditions represent contrasts computed after baseline correction:
 
 -   Action binding (Voluntary − Involuntary): `vaa_iaa`
 -   Outcome binding (Voluntary − Involuntary): `vss_iss`
--   75% without outcome − 50% without outcome: `a75_a50_an`
--   50% with outcome − 50% without outcome: `a50_ay_an`
 
 ------------------------------------------------------------------------
 
@@ -119,18 +94,18 @@ Outcome binding conditions:
 
 -   `perceptual_shift_action_outcome.csv` Perceptual shift values under voluntary and involuntary conditions. Column names correspond directly to condition labels.
 
--   `perceptual_shift_probability.csv` Perceptual shift values under different probability conditions. Column names correspond directly to condition labels.
-
 ------------------------------------------------------------------------
 
 # 02_meg_results
 
-Contains 11 CSV files representing MEG amplitude data under different conditions.
+This directory contains four CSV files for stimulus-locked MEG amplitude responses:
 
--   Files ending with `6` contain amplitude values for 6 ROIs.
--   Files ending with `12` contain amplitude values for 12 ROIs.
+- `ta_action_va_12.csv`
+- `ta_action_ia_12.csv`
+- `ta_outcome_vs_12.csv`
+- `ta_outcome_is_12.csv`
 
-Each file corresponds to a specific condition.
+Each file contains summary time-course data for 12 ROIs, with columns `region`, `Time`, `condition`, `Value`, and `SE`. Here, `Value` denotes the mean amplitude, and `SE` denotes the standard error of the mean.
 
 ------------------------------------------------------------------------
 
@@ -140,7 +115,6 @@ The following files contain MEG amplitude **differences (0--1000 ms)** across co
 
 -   `meg_action_difference.csv`
 -   `meg_outcome_difference.csv`
--   `meg_probability_difference.csv`
 
 Behavioral difference:
 
@@ -152,8 +126,6 @@ Contains averaged MEG amplitude differences (averaged across subjects) used for 
 
 -   `meg_mean_action.csv`
 -   `meg_mean_outcome.csv`
--   `meg_mean_75_50.csv`
--   `meg_mean_50.csv`
 
 ------------------------------------------------------------------------
 
@@ -166,7 +138,6 @@ Contains mean MEG amplitude differences (averaged across subjects) within predef
 
 Files include:
 
--   `75_50_without_outcome_for_network.csv`
 -   `action_binding_for_network.csv`
 -   `outcome_binding_for_network.csv`
 
@@ -213,13 +184,11 @@ Unlike MEG data, these files are **not baseline-corrected**.
 
 -   `ieeg_MTGR.csv`
 
--   `ieeg_PostcentralL.csv`
-
 -   `behavior_ieeg.csv` Single-trial behavioral response times under voluntary and involuntary outcome conditions.
 
 ### feature/
 
-Contains extracted features from MTGR and PostcentralL:
+Contains extracted features from MTGR:
 
 -   Mean amplitude
 -   Band power

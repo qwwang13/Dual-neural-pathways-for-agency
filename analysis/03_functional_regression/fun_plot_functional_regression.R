@@ -1,5 +1,9 @@
-# 03_functional_regression/plot_binding_panels.R
-# Minimal, reusable: top panel + bottom panel + combine/save
+# fun_plot_binding_by_columns.R
+# Horizontal layout:
+# Col 1: original amplitude
+# Col 2: zoomed amplitude
+# Col 3: estimated coefficients
+# Each row = one ROI
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -11,45 +15,41 @@ suppressPackageStartupMessages({
   library(scales)
 })
 
-# ============================================
-# 1) Top panel: overlap background + mean lines
-# ============================================
-plot_top_overlap_panel <- function(df_meg_mean,
-                                   coef_df,
-                                   regions_name,
-                                   time_min = 0,
-                                   time_max = 1000,
-                                   overlap_step_ms = 10,
-                                   desired_order_condition = c("vaa_ba","iaa_bi","vaa_iaa"),
-                                   style = list(
-                                     overlap_fill = c("1"="grey90","2"="grey80","3"="grey40"),
-                                     line_colors  = c('iaa_bi'="#42a5f5",'vaa_ba'="#344fac",'vaa_iaa'="#ff4d6d"),
-                                     line_lty     = c('iaa_bi'=5,'vaa_ba'=5,'vaa_iaa'=1),
-                                     line_labels  = c('iaa_bi'="Involuntary",'vaa_ba'="Voluntary",'vaa_iaa'="Difference")
-                                   )) {
+build_zoom_x_scales <- function(border_df) {
+  lst <- vector("list", nrow(border_df))
   
-  desired_order <- regions_name
+  for (i in seq_len(nrow(border_df))) {
+    rg <- as.character(border_df$region[i])
+    x1 <- border_df$xmin[i]
+    x2 <- border_df$xmax[i]
+    
+    brks <- pretty(c(x1, x2), n = 4)
+    brks <- brks[brks >= x1 & brks <= x2]
+    
+    lst[[i]] <- eval(parse(text =
+                             paste0(
+                               "region == '", rg, "' ~ scale_x_continuous(limits = c(",
+                               x1, ", ", x2, "), breaks = c(",
+                               paste(brks, collapse = ", "),
+                               "))"
+                             )
+    ))
+  }
   
-  df_amp <- df_meg_mean %>%
-    filter(region %in% regions_name, Time >= time_min, Time <= time_max) %>%
-    mutate(
-      region = factor(region, levels = desired_order),
-      condition = factor(condition, levels = desired_order_condition)
-    )
-  
-  y_upper <- ceiling(max(df_amp$Value, na.rm = TRUE))
-  y_lower <- floor(min(df_amp$Value, na.rm = TRUE))
-  y_limits <- c(y_upper, y_lower)
-  y_breaks <- seq(y_lower, y_upper, by = 1)
-  
-  coef_use <- coef_df %>%
-    mutate(region = factor(region, levels = desired_order)) %>%
-    filter(region %in% regions_name)
-  
+  lst
+}
+
+build_overlap_df <- function(coef_df,
+                             regions_name,
+                             time_min = 0,
+                             time_max = 1000,
+                             overlap_step_ms = 10) {
   time_points <- seq(time_min, time_max, by = overlap_step_ms)
   
-  overlap_df <- map_dfr(regions_name, function(rg) {
-    df_rg <- coef_use %>% filter(region == rg)
+  map_dfr(regions_name, function(rg) {
+    df_rg <- coef_df %>%
+      filter(region == rg)
+    
     if (nrow(df_rg) == 0) return(tibble())
     
     overlap_count <- sapply(time_points, function(t) {
@@ -57,170 +57,91 @@ plot_top_overlap_panel <- function(df_meg_mean,
     })
     
     tibble(
-      lower = time_points,
-      upper = time_points + overlap_step_ms,
+      lower   = time_points,
+      upper   = time_points + overlap_step_ms,
       Overlap = as.character(overlap_count),
-      region = rg
+      region  = rg
     ) %>%
       filter(lower < time_max, Overlap != "0")
   }) %>%
-    mutate(region = factor(region, levels = desired_order))
-  
-  ggplot() +
-    geom_rect(
-      data = overlap_df,
-      aes(xmin = lower, xmax = upper, fill = Overlap),
-      ymin = -Inf, ymax = Inf, alpha = 0.6
-    ) +
-    geom_line(
-      data = df_amp,
-      aes(x = Time, y = Value, group = condition, color = condition, linetype = condition),
-      linewidth = 0.8, alpha = 1
-    ) +
-    facet_wrap(~ region, nrow = 1, scales = "fixed") +
-    scale_fill_manual(name = "Overlap", values = style$overlap_fill) +
-    scale_y_reverse(name = "Amplitude (z-score)", limits = y_limits, breaks = y_breaks) +
-    scale_color_manual(name = NULL, values = style$line_colors, labels = style$line_labels) +
-    scale_linetype_manual(name = NULL, values = style$line_lty, labels = style$line_labels) +
-    scale_x_continuous(name = NULL, breaks = seq(time_min, time_max, by = 200), limits = c(time_min, time_max)) +
-    geom_hline(yintercept = 0, lty = 2, alpha = 0.5, linewidth = 0.8) +
-    theme_minimal() +
-    theme(
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold", size = rel(1.5), color = "black"),
-      panel.border = element_rect(fill = "transparent", color = "black", linewidth = 1),
-      panel.spacing = unit(10, "pt"),
-      panel.grid.major = element_line(color = "grey92", linewidth = 0.4),
-      panel.grid.minor = element_blank(),
-      legend.position = "top",
-      legend.box = "horizontal",
-      legend.spacing = unit(0.5, "cm"),
-      legend.title = element_text(face = "bold", size = rel(1.2)),
-      legend.text = element_text(size = rel(1.2)),
-      axis.line = element_line(color = "black", linewidth = 0.5),
-      axis.ticks = element_line(color = "black", linewidth = 0.3),
-      axis.title.y = element_text(size = rel(1.5)),
-      axis.text.x  = element_text(size = rel(1.5)),
-      axis.text.y  = element_text(size = rel(1.5)),
-      axis.title.x = element_text(size = rel(1.5))
-    )
+    mutate(region = factor(region, levels = regions_name))
 }
 
-# ==========================================================
-# 2) Bottom panel: nested facets (Amplitude + Coefficients)
-# ==========================================================
-
-plot_bottom_nested <- function(df_meg_mean,
-                               coef_df,      # filtered_models_final: region,time_window,lower,upper,coef
-                               border_df,    # tibble: region,xmin,xmax
-                               regions_name = border_df$region,
-                               smooth_span = c("SMA-R"=0.75,"PreSMA-R"=0.40,"PreSMA-L"=0.75),
-                               x_break = seq(180, 280, by = 20),
-                               strip_fill   = "grey90",
-                               smooth_color = "#9b5de5",
-                               style = list(
-                                 line_colors  = c('iaa_bi'="#42a5f5",'vaa_ba'="#344fac",'vaa_iaa'="#ff4d6d"),
-                                 coef_shapes  = c("vaa_ba"=NA,"iaa_bi"=NA,"vaa_iaa"=NA),
-                                 linetype_map = c("vaa_ba"="dashed","iaa_bi"="dashed","vaa_iaa"="solid")
-                               )) {
-  
-  # --- ROI table + display label ---
-  roi <- border_df %>%
-    filter(region %in% regions_name) %>%
-    mutate(
-      region = as.character(region),
-      display_group = paste0(xmin, "-", xmax, "ms")
-    )
-  
-  region_levels <- roi$display_group
-  tw_levels <- sort(unique(as.character(coef_df$time_window)))
-  
-  # --- Amplitude (clip to ROI) ---
-  amp_df <- df_meg_mean %>%
-    filter(region %in% regions_name) %>%
-    mutate(region = as.character(region)) %>%
-    left_join(roi, by = "region") %>%
-    filter(Time >= xmin, Time <= xmax) %>%
-    transmute(
-      display_group,
-      plot_type = "Amplitude",
-      Time,
-      y_value = Value,
-      condition
-    )
-  
-  # --- Coef points: expand to 10ms bins, fill missing with 0, and clip by ROI (per region) ---
+build_coef_points_and_smooth <- function(coef_df,
+                                         border_df,
+                                         regions_name,
+                                         smooth_span) {
   step_ms <- 10
   
-  coef_df2 <- coef_df %>%
-    mutate(Time = pmap_dbl(list(lower, upper), \(x, y) (x + y) / 2))
+  roi <- border_df %>%
+    filter(region %in% regions_name) %>%
+    mutate(region = as.character(region))
   
-  coef_grid <- crossing(
+  coef_df2 <- coef_df %>%
+    mutate(
+      region = as.character(region),
+      time_window = as.character(time_window),
+      Time = map2_dbl(lower, upper, ~ (.x + .y) / 2)
+    )
+  
+  coef_grid <- tidyr::crossing(
     time_window = unique(coef_df2$time_window),
     region      = unique(coef_df2$region)
   ) %>%
     left_join(
-      border_df %>%
-        transmute(
-          region = as.character(region),
-          xmin   = as.numeric(xmin),
-          xmax   = as.numeric(xmax)
-        ),
+      roi %>% transmute(region, xmin, xmax),
       by = "region"
     ) %>%
     mutate(
-      lower = map2(xmin - step_ms, xmax, \(a, b) seq(a, b, by = step_ms))
+      lower = map2(xmin - step_ms, xmax, ~ seq(.x, .y, by = step_ms))
     ) %>%
     unnest(lower) %>%
-    mutate(upper = lower + step_ms) %>%
+    mutate(
+      upper = lower + step_ms
+    ) %>%
     select(time_window, region, lower, upper)
   
-  region_ranges <- border_df %>%
+  region_ranges <- roi %>%
     transmute(
-      region   = as.character(region),
-      min_time = as.numeric(xmin) - step_ms,
-      max_time = as.numeric(xmax) + step_ms
+      region,
+      min_time = xmin - step_ms,
+      max_time = xmax + step_ms
     )
   
+  # 注意：
+  # action_binding.csv / outcome_binding.csv 保存前已经做过：
+  # coef = coef / (as.numeric(time_window) / 10)
+  # 所以这里不能再除一次，直接使用 csv 里的 coef。
   coef_points <- coef_df2 %>%
-    merge(region_ranges, by="region") %>%
+    left_join(region_ranges, by = "region") %>%
     filter(lower >= min_time, upper <= max_time) %>%
     select(time_window, region, lower, upper, coef) %>%
-    rename(
-      y_value_raw = coef
-    ) %>%
+    rename(y_value_raw = coef) %>%
     mutate(
       lower = as.numeric(lower),
       upper = as.numeric(upper),
-      new_lower = pmap(
-        list(lower, upper),
-        \(lwr, upr) seq(lwr, upr - step_ms, by = step_ms)
-      ),
-      y_value = pmap_dbl(
-        list(y_value_raw, time_window),
-        \(x, tw) x / (as.numeric(tw) / step_ms)
-      )
+      new_lower = map2(lower, upper, ~ seq(.x, .y - step_ms, by = step_ms)),
+      y_value = y_value_raw
     ) %>%
-    select(-c(lower, upper, y_value_raw)) %>%
+    select(-lower, -upper, -y_value_raw) %>%
     unnest(new_lower) %>%
     mutate(
       lower = new_lower,
       upper = lower + step_ms
     ) %>%
     select(-new_lower) %>%
-    merge(
+    right_join(
       coef_grid,
-      by = c("time_window", "region", "lower", "upper"),
-      all.y = TRUE
+      by = c("time_window", "region", "lower", "upper")
     ) %>%
     mutate(
       y_value = if_else(is.na(y_value), 0, y_value)
     ) %>%
-    merge(region_ranges, by = "region", all.x = TRUE) %>%
+    left_join(region_ranges, by = "region") %>%
     mutate(
       Time = pmap_dbl(
         list(lower, upper, min_time, max_time),
-        \(x, y, min_t, max_t) {
+        function(x, y, min_t, max_t) {
           if (x == min_t) {
             min_t + step_ms
           } else if (y == max_t) {
@@ -231,24 +152,16 @@ plot_bottom_nested <- function(df_meg_mean,
         }
       )
     ) %>%
-    select(-c(min_time, max_time)) %>%
-    mutate(region = factor(region, levels = regions_name))%>%
-    left_join(
-      roi %>% select(region, display_group),
-      by = "region"
-    ) %>% 
-    mutate(plot_type = "Coefficients",
-           condition = as.character(time_window))
+    select(-min_time, -max_time) %>%
+    mutate(
+      region = factor(region, levels = regions_name),
+      time_window = factor(time_window, levels = c("10", "20", "40"))
+    )
   
-  
-  
-  # --- Smooth lines (loess on coef_points, per ROI) ---
-  if (is.null(smooth_span)) {
-    smooth_span <- stats::setNames(rep(0.6, length(regions_name)), regions_name)
-  }
-  
-  smooth_lines <- purrr::map_dfr(regions_name, function(rg) {
-    df_rg <- coef_points %>% filter(region == rg)
+  smooth_lines <- map_dfr(regions_name, function(rg) {
+    df_rg <- coef_points %>%
+      filter(region == rg)
+    
     sp <- smooth_span[[rg]]
     if (is.null(sp) || is.na(sp)) sp <- 0.6
     
@@ -256,540 +169,407 @@ plot_bottom_nested <- function(df_meg_mean,
     
     x0 <- roi$xmin[roi$region == rg]
     x1 <- roi$xmax[roi$region == rg]
+    
     grid_x <- seq(x0, x1, length.out = 200)
     pred_y <- predict(fit, newdata = data.frame(Time = grid_x))
     
     tibble(
-      display_group = roi$display_group[roi$region == rg],
-      plot_type = "Coefficients",
+      region = factor(rg, levels = regions_name),
       Time = grid_x,
       y_value = pred_y
     )
   })
   
-  # --- Combine for plotting ---
-  combined <- bind_rows(
-    amp_df,
-    coef_points %>% select(display_group, plot_type, Time, y_value, condition)
+  list(
+    coef_points = coef_points,
+    smooth_lines = smooth_lines
   )
-  
-  combined$display_group <- factor(combined$display_group, levels = region_levels)
-  combined$plot_type <- factor(combined$plot_type, levels = c("Amplitude", "Coefficients"))
-  
-  ggplot(combined, aes(x = Time, y = y_value)) +
-    geom_line(
-      data = combined %>% filter(plot_type == "Amplitude"),
-      aes(group = interaction(condition, display_group),
-          color = condition,
-          linetype = condition),
-      linewidth = 0.8,
-      alpha = 1
-    ) +
-    geom_point(
-      data = combined %>% filter(plot_type == "Coefficients"),
-      aes(color = condition, shape = condition),
-      size = 3,
-      alpha = 0.9
-    ) +
-    geom_line(
-      data = smooth_lines,
-      aes(group = display_group),
-      color = smooth_color,
-      linewidth = 1.2,
-      alpha = 1
-    ) +
-    ggh4x::facet_nested(
-      ~ display_group + plot_type,
-      scales = "free_x",
-      space = "fixed",
-      nest_line = element_line(color = "gray60", linewidth = 0.5)
-    ) +
-    scale_y_reverse(
-      name = NULL,
-      breaks = scales::pretty_breaks(n = 6),
-      expand = expansion(mult = 0.05)
-    ) +
-    scale_x_continuous(
-      name = "Time (ms)",
-      breaks = x_break,
-      expand = expansion(mult = 0.02)
-    ) +
-    scale_color_manual(
-      name = NULL,
-      values = c(style$line_colors, "10"="#FF8C00","20"="#3399FF","40"="#00CC99"),
-      breaks = names(c("10"="10 ms","20"="20 ms","40"="40 ms")),
-      labels = unname(c("10"="10 ms","20"="20 ms","40"="40 ms"))
-    ) +
-    scale_shape_manual(
-      name = NULL,
-      values = c(style$coef_shapes, "10"=15,"20"=16,"40"=17),
-      breaks = names(c("10"="10 ms","20"="20 ms","40"="40 ms")),
-      labels = unname(c("10"="10 ms","20"="20 ms","40"="40 ms"))
-    ) +
-    scale_linetype_manual(name = NULL, values = c(style$linetype_map,"10"="blank","20"="blank","40"="blank"), guide = "none") +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.5, alpha = 0.7) +
-    theme_minimal() +
-    theme(
-      strip.background = element_rect(fill = strip_fill, color = strip_fill, linewidth = 0.5),
-      strip.text = element_text(face = "bold", size = rel(1.5), color = "black"),
-      panel.border = element_rect(fill = "transparent", color = "black", linewidth = 1),
-      panel.spacing = unit(15, "pt"),
-      panel.grid.major = element_line(color = "grey92", linewidth = 0.4),
-      panel.grid.minor = element_blank(),
-      legend.position = "bottom",
-      legend.box = "horizontal",
-      legend.spacing = unit(0.2, "cm"),
-      legend.title = element_text(face = "bold", size = rel(1.2)),
-      legend.text  = element_text(size = rel(1.2)),
-      axis.line = element_line(color = "black", linewidth = 0.5),
-      axis.ticks = element_line(color = "black", linewidth = 0.3),
-      axis.title.y = element_text(size = rel(1.5)),
-      axis.text.x  = element_text(size = rel(1.5)),
-      axis.text.y  = element_text(size = rel(1.5)),
-      axis.title.x = element_text(size = rel(1.5))
-    )
 }
 
-
-# =============================================================
-# Plot STGR
-# =============================================================
-
-# ============================================
-# 1) Left panel: overlap background + mean lines
-# ============================================
-plot_left_overlap_panel_50 <- function(df_meg_mean,
-                                   coef_df,
-                                   regions_name,
-                                   time_min = 0,
-                                   time_max = 1000,
-                                   overlap_step_ms = 10,
-                                   desired_order_condition = c("vaa_ba","iaa_bi","vaa_iaa"),
-                                   style = list(
-                                     overlap_fill = c("1"="grey90","2"="grey80","3"="grey40"),
-                                     line_colors  = c('iaa_bi'="#42a5f5",'vaa_ba'="#344fac",'vaa_iaa'="#ff4d6d"),
-                                     line_lty     = c('iaa_bi'=5,'vaa_ba'=5,'vaa_iaa'=1),
-                                     line_labels  = c('iaa_bi'="Involuntary",'vaa_ba'="Voluntary",'vaa_iaa'="Difference")
-                                   )) {
-  
-  desired_order <- regions_name
-  
-  df_amp <- df_meg_mean %>%
-    filter(region %in% regions_name, Time >= time_min, Time <= time_max) %>%
-    mutate(
-      region = factor(region, levels = desired_order),
-      condition = factor(condition, levels = desired_order_condition)
-    )
-  
-  y_upper <- ceiling(max(df_amp$Value, na.rm = TRUE))
-  y_lower <- floor(min(df_amp$Value, na.rm = TRUE))
-  y_limits <- c(y_upper, y_lower)
-  y_breaks <- seq(y_lower, y_upper, by = 2)
-  
-  coef_use <- coef_df %>%
-    mutate(region = factor(region, levels = desired_order)) %>%
-    filter(region %in% regions_name)
-  
-  time_points <- seq(time_min, time_max, by = overlap_step_ms)
-  
-  overlap_df <- map_dfr(regions_name, function(rg) {
-    df_rg <- coef_use %>% filter(region == rg)
-    if (nrow(df_rg) == 0) return(tibble())
-    
-    overlap_count <- sapply(time_points, function(t) {
-      sum(t >= df_rg$lower & t < df_rg$upper)
-    })
-    
-    tibble(
-      lower = time_points,
-      upper = time_points + overlap_step_ms,
-      Overlap = as.character(overlap_count),
-      region = rg
-    ) %>%
-      filter(lower < time_max, Overlap != "0")
-  }) %>%
-    mutate(region = factor(region, levels = desired_order))
-  
-  ggplot() +
-    geom_rect(
-      data = overlap_df,
-      aes(xmin = lower, xmax = upper, fill = Overlap),
-      ymin = -Inf, ymax = Inf, alpha = 0.6
-    ) +
-    geom_line(
-      data = df_amp,
-      aes(x = Time, y = Value, group = condition, color = condition, linetype = condition),
-      linewidth = 0.8, alpha = 1
-    ) +
-    facet_wrap(~ region, nrow = 1, scales = "fixed") +
-    scale_fill_manual(name = "Overlap", values = style$overlap_fill,
-                      labels = function(x) paste0(x),
-                      guide = guide_legend(
-                        override.aes = list(alpha = 0.6),
-                        order = 1  # Overlap图例放在第一个
-                      )) +
-    scale_y_reverse(name = "Amplitude (z-score)", limits = y_limits, breaks = y_breaks) +
-    scale_color_manual(name = NULL, values = style$line_colors, labels = style$line_labels,
-                       guide = guide_legend(
-                         nrow = 1,  # 一行显示
-                         order = 2,  # 线条图例放在第二个
-                         title.position = "top"
-                       )) +
-    scale_linetype_manual(name = NULL, values = style$line_lty, labels = style$line_labels,
-                          guide = guide_legend(
-                            nrow = 1,  # 一行显示
-                            order = 2  # 线条图例放在第二个
-                          )) +
-    scale_x_continuous(name = NULL, breaks = seq(time_min, time_max, by = 200), limits = c(time_min, time_max)) +
-    geom_hline(yintercept = 0, lty = 2, alpha = 0.5, linewidth = 0.8) +
-    theme_minimal() +
+theme_white_compact <- function(base_size = 8.5, base_family = "Arial") {
+  theme_classic(base_size = base_size, base_family = base_family) +
     theme(
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold", size = rel(1.5), color = "black"),
-      panel.border = element_rect(fill = "transparent", color = "black", linewidth = 1),
-      panel.spacing = unit(10, "pt"),
-      panel.grid.major = element_line(color = "grey92", linewidth = 0.4),
+      plot.background  = element_rect(fill = "white", colour = NA),
+      panel.background = element_rect(fill = "white", colour = NA),
+      panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      legend.justification = c(0.5, 1),  # 居中，顶部对齐
+      
+      strip.background = element_blank(),
+      strip.text = element_text(
+        face = "bold",
+        size = base_size + 0.6,
+        color = "black"
+      ),
+      
+      panel.border = element_rect(
+        fill = NA,
+        color = "black",
+        linewidth = 0.40
+      ),
+      panel.spacing = unit(5, "pt"),
+      
+      # 避免 axis.line 和 panel.border 叠加导致边框粗细不一致
+      axis.line = element_blank(),
+      
+      axis.ticks = element_line(
+        color = "black",
+        linewidth = 0.3
+      ),
+      axis.ticks.length = unit(1.1, "mm"),
+      
+      axis.title = element_text(
+        size = base_size + 0.2,
+        color = "black"
+      ),
+      axis.text = element_text(
+        size = base_size - 0.1,
+        color = "black"
+      ),
+      
       legend.background = element_blank(),
-      legend.box = "vertical",  
-      legend.box.just = "top",  
-      legend.spacing = unit(0.2, "cm"),
-      legend.spacing.x = unit(0.5, "cm"), 
-      legend.spacing.y = unit(0.3, "cm"), 
-      legend.key = element_rect(fill = "white", color = NA),
-      legend.key.size = unit(0.8, "cm"),
-      legend.key.width = unit(1.2, "cm"),
-      legend.title = element_text(face = "bold", size = rel(1.2)),
-      legend.text = element_text(size = rel(1.2)),
-      axis.line = element_line(color = "black", linewidth = 0.5),
-      axis.ticks = element_line(color = "black", linewidth = 0.3),
-      axis.title.y = element_text(size = rel(1.5)),
-      axis.text.x  = element_text(size = rel(1.5)),
-      axis.text.y  = element_text(size = rel(1.5)),
-      axis.title.x = element_text(size = rel(1.5))
-    )+
-    # 12. 通过guides进一步控制图例
-    guides(
-      fill = guide_legend(
-        title = "Overlap",
-        direction = "vertical",  
-        ncol = 1,  
-        title.position = "top",
-        title.hjust = 0.5,
-        order = 1,
-        position = "left"
+      legend.key = element_blank(),
+      legend.title = element_text(
+        face = "bold",
+        size = base_size
       ),
-      color = guide_legend(
-        title = NULL,
-        direction = "horizontal",  
-        nrow = 1,  
-        title.position = "top",
-        title.hjust = 0.5,
-        order = 2,
-        position = "top"
+      legend.text = element_text(
+        size = base_size - 0.1
       ),
-      linetype = guide_legend(
-        title = NULL,
-        direction = "horizontal",  
-        nrow = 1,  
-        title.position = "top",
-        title.hjust = 0.5,
-        order = 2,
-        position = "top"
-      )
-    ) 
+      
+      plot.title = element_text(
+        face = "bold",
+        size = base_size + 1,
+        hjust = 0.5
+      ),
+      plot.margin = margin(4, 4, 4, 4)
+    )
 }
 
-# ==========================================================
-# 2) Right panel: nested facets (Amplitude + Coefficients)
-# ==========================================================
-
-plot_right_nested_50 <- function(df_meg_mean,
-                               coef_df,      # filtered_models_final: region,time_window,lower,upper,coef
-                               border_df,    # tibble: region,xmin,xmax
-                               regions_name = border_df$region,
-                               smooth_span = c("SMA-R"=0.75,"PreSMA-R"=0.40,"PreSMA-L"=0.75),
-                               x_break = seq(180, 280, by = 20),
-                               strip_fill   = "grey90") {
+plot_binding_by_columns <- function(df_meg_mean_raw,
+                                    coef_df_raw,
+                                    regions_name,
+                                    border_df,
+                                    condition_order,
+                                    style,
+                                    smooth_span,
+                                    time_min = 0,
+                                    time_max = 1000,
+                                    overlap_step_ms = 10,
+                                    reverse_amp_y = TRUE,
+                                    reverse_coef_y = TRUE,
+                                    plot_widths = c(1.42, 0.7, 0.7),
+                                    base_size = 8.5,
+                                    base_family = "Arial") {
   
-  # --- ROI table + display label ---
-  roi <- border_df %>%
-    filter(region %in% regions_name) %>%
-    mutate(
-      region = as.character(region),
-      display_group = paste0(xmin, "-", xmax, "ms")
-    )
-  
-  region_levels <- roi$display_group
-  tw_levels <- sort(unique(as.character(coef_df$time_window)))
-  
-  # --- Amplitude (clip to ROI) ---
-  amp_df <- df_meg_mean %>%
-    filter(region %in% regions_name) %>%
-    mutate(region = as.character(region)) %>%
-    left_join(roi, by = "region") %>%
-    filter(Time >= xmin, Time <= xmax) %>%
-    transmute(
-      display_group,
-      plot_type = "Amplitude",
-      Time,
-      y_value = Value,
-      condition
-    )
-  
-  # --- Coef points: expand to 10ms bins, fill missing with 0, and clip by ROI (per region) ---
-  step_ms <- 10
-  
-  coef_df2 <- coef_df %>%
-    mutate(Time = pmap_dbl(list(lower, upper), \(x, y) (x + y) / 2))
-  
-  coef_grid <- crossing(
-    time_window = unique(coef_df2$time_window),
-    region      = unique(coef_df2$region)
-  ) %>%
-    left_join(
-      border_df %>%
-        transmute(
-          region = as.character(region),
-          xmin   = as.numeric(xmin),
-          xmax   = as.numeric(xmax)
-        ),
-      by = "region"
-    ) %>%
-    mutate(
-      lower = map2(xmin - step_ms, xmax, \(a, b) seq(a, b, by = step_ms))
-    ) %>%
-    unnest(lower) %>%
-    mutate(upper = lower + step_ms) %>%
-    select(time_window, region, lower, upper)
-  
-  region_ranges <- border_df %>%
-    transmute(
-      region   = as.character(region),
-      min_time = as.numeric(xmin) - step_ms,
-      max_time = as.numeric(xmax) + step_ms
-    )
-  
-  coef_points <- coef_df2 %>%
-    merge(region_ranges, by="region") %>%
-    filter(lower >= min_time, upper <= max_time) %>%
-    select(time_window, region, lower, upper, coef) %>%
+  df_meg_mean <- df_meg_mean_raw %>%
     rename(
-      y_value_raw = coef
+      time = Time,
+      amp  = Value
     ) %>%
     mutate(
-      lower = as.numeric(lower),
-      upper = as.numeric(upper),
-      new_lower = pmap(
-        list(lower, upper),
-        \(lwr, upr) seq(lwr, upr - step_ms, by = step_ms)
-      ),
-      y_value = pmap_dbl(
-        list(y_value_raw, time_window),
-        \(x, tw) x / (as.numeric(tw) / step_ms)
-      )
-    ) %>%
-    select(-c(lower, upper, y_value_raw)) %>%
-    unnest(new_lower) %>%
-    mutate(
-      lower = new_lower,
-      upper = lower + step_ms
-    ) %>%
-    select(-new_lower) %>%
-    merge(
-      coef_grid,
-      by = c("time_window", "region", "lower", "upper"),
-      all.y = TRUE
-    ) %>%
-    mutate(
-      y_value = if_else(is.na(y_value), 0, y_value)
-    ) %>%
-    merge(region_ranges, by = "region", all.x = TRUE) %>%
-    mutate(
-      Time = pmap_dbl(
-        list(lower, upper, min_time, max_time),
-        \(x, y, min_t, max_t) {
-          if (x == min_t) {
-            min_t + step_ms
-          } else if (y == max_t) {
-            max_t - step_ms
-          } else {
-            (x + y) / 2
-          }
-        }
-      )
-    ) %>%
-    select(-c(min_time, max_time)) %>%
-    mutate(region = factor(region, levels = regions_name))%>%
-    left_join(
-      roi %>% select(region, display_group),
-      by = "region"
-    ) %>% 
-    mutate(plot_type = "Coefficients",
-           condition = as.character(time_window))
-  
-  
-
-  # --- Smooth lines (loess on coef_points, per ROI) ---
-  if (is.null(smooth_span)) {
-    smooth_span <- stats::setNames(rep(0.6, length(regions_name)), regions_name)
-  }
-  
-  smooth_lines <- purrr::map_dfr(regions_name, function(rg) {
-    df_rg <- coef_points %>% filter(region == rg)
-    sp <- smooth_span[[rg]]
-    if (is.null(sp) || is.na(sp)) sp <- 0.6
-    
-    fit <- loess(y_value ~ Time, data = df_rg, span = sp)
-    
-    x0 <- roi$xmin[roi$region == rg]
-    x1 <- roi$xmax[roi$region == rg]
-    grid_x <- seq(x0, x1, length.out = 200)
-    pred_y <- predict(fit, newdata = data.frame(Time = grid_x))
-    
-    tibble(
-      display_group = roi$display_group[roi$region == rg],
-      plot_type = "Coefficients",
-      Time = grid_x,
-      y_value = pred_y
+      region = factor(region, levels = regions_name),
+      condition = factor(condition, levels = condition_order)
     )
-  })
   
-  # --- Combine for plotting ---
-  combined <- bind_rows(
-    amp_df,
-    coef_points %>% select(display_group, plot_type, Time, y_value, condition)
+  coef_df <- coef_df_raw %>%
+    mutate(
+      region = factor(region, levels = regions_name),
+      time_window = as.character(time_window)
+    )
+  
+  border_df <- border_df %>%
+    mutate(
+      region = factor(region, levels = regions_name)
+    )
+  
+  df_full <- df_meg_mean %>%
+    filter(
+      region %in% regions_name,
+      time >= time_min,
+      time <= time_max,
+      condition %in% condition_order
+    ) %>%
+    mutate(
+      region = factor(region, levels = regions_name)
+    )
+  
+  df_zoom <- df_full %>%
+    left_join(border_df, by = "region") %>%
+    filter(
+      time >= xmin,
+      time <= xmax
+    ) %>%
+    mutate(
+      region = factor(region, levels = regions_name)
+    )
+  
+  coef_use <- coef_df %>%
+    filter(region %in% regions_name) %>%
+    mutate(
+      region = factor(region, levels = regions_name)
+    )
+  
+  coef_build <- build_coef_points_and_smooth(
+    coef_df = coef_use,
+    border_df = border_df,
+    regions_name = regions_name,
+    smooth_span = smooth_span
   )
   
-  combined$display_group <- factor(combined$display_group, levels = region_levels)
-  combined$plot_type <- factor(combined$plot_type, levels = c("Amplitude", "Coefficients"))
+  coef_points  <- coef_build$coef_points
+  smooth_lines <- coef_build$smooth_lines
   
-  amplitude_plot <- ggplot(amp_df, aes(x = Time, y = y_value)) +
+  overlap_df <- build_overlap_df(
+    coef_df = coef_use,
+    regions_name = regions_name,
+    time_min = time_min,
+    time_max = time_max,
+    overlap_step_ms = overlap_step_ms
+  )
+  
+  zoom_x_scales <- build_zoom_x_scales(border_df)
+  
+  # Col 1: original amplitude
+  y1_upper  <- ceiling(max(df_full$amp, na.rm = TRUE))
+  y1_lower  <- floor(min(df_full$amp, na.rm = TRUE))
+  y1_limits <- c(y1_upper, y1_lower)
+  y1_breaks <- seq(y1_lower, y1_upper, by = 1)
+  
+  # Col 2: zoomed amplitude
+  y2_upper  <- ceiling(max(df_zoom$amp, na.rm = TRUE))
+  y2_lower  <- floor(min(df_zoom$amp, na.rm = TRUE))
+  y2_limits <- c(y2_upper, y2_lower)
+  y2_breaks <- pretty(c(y2_lower, y2_upper), n = 5)
+  
+  p_col1 <- ggplot() +
+    geom_rect(
+      data = overlap_df,
+      aes(xmin = lower, xmax = upper, fill = Overlap),
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.55
+    ) +
     geom_line(
-      aes(group = interaction(condition, display_group), 
-          color = condition, 
-          linetype = condition),
-      linewidth = 0.8,
-      alpha = 1
+      data = df_full,
+      aes(
+        x = time,
+        y = amp,
+        color = condition,
+        linetype = condition
+      ),
+      linewidth = 0.8
     ) +
-    facet_wrap(~ display_group, scales = "fixed") +
-    scale_y_reverse(
-      name = "Amplitude",
-      breaks = scales::pretty_breaks(n = 6),
-      expand = expansion(mult = 0.05)
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      color = "black",
+      linewidth = 0.25
     ) +
-    scale_x_continuous(
-      name = "Time (ms)",
-      breaks = seq(0, 1500, by = 10),
-      expand = expansion(mult = 0.02)
+    geom_vline(
+      data = border_df,
+      aes(xintercept = xmin),
+      inherit.aes = FALSE,
+      linewidth = 0.28,
+      linetype = "dotted",
+      colour = "grey65"
+    ) +
+    geom_vline(
+      data = border_df,
+      aes(xintercept = xmax),
+      inherit.aes = FALSE,
+      linewidth = 0.28,
+      linetype = "dotted",
+      colour = "grey65"
+    ) +
+    ggh4x::facet_wrap2(
+      ~ region,
+      ncol = 1,
+      scales = "fixed",
+      drop = FALSE,
+      axes = "x",
+      remove_labels = "none"
+    ) +
+    scale_fill_manual(
+      name = "Overlap",
+      values = style$overlap_fill,
+      guide = guide_legend(order = 1)
     ) +
     scale_color_manual(
-      name = NULL,
-      values = c(
-        'a50_an_ba' = "#42a5f5",
-        'a50_ay_ba' = "#344fac",
-        'a50_ay_an' = "#ff4d6d"
-      ),
-      labels = c("a50_an_ba", "a50_ay_ba", "a50_ay_an")
+      name = "Condition",
+      values = style$line_colors,
+      labels = style$line_labels,
+      guide = guide_legend(order = 2)
     ) +
     scale_linetype_manual(
-      name = NULL,
-      values = c(
-        "a50_ay_ba" = "dashed",
-        "a50_an_ba" = "dashed",
-        "a50_ay_an" = "solid"
-      ),
-      labels = c("a50_an_ba", "a50_ay_ba", "a50_ay_an")
+      name = "Condition",
+      values = style$line_lty,
+      labels = style$line_labels,
+      guide = guide_legend(order = 2)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.5, alpha = 0.7) +
-    theme_minimal() +
-    theme(
-      strip.background = element_rect(fill = strip_fill, color = strip_fill, linewidth = 0.5),
-      strip.text = element_text(face = "bold", size = rel(1.5), color = "black"),
-      panel.border = element_rect(fill = "transparent", color = "black", linewidth = 1),
-      panel.spacing = unit(15, "pt"),
-      panel.grid.major = element_line(color = "grey92", linewidth = 0.4),
-      panel.grid.minor = element_blank(),
-      legend.position = "none",  
-      axis.line = element_line(color = "black", linewidth = 0.5),
-      axis.ticks = element_line(color = "black", linewidth = 0.3),
-      axis.title.y = element_text(size = rel(1.5)),
-      axis.text.x = element_text(size = rel(1.5)),
-      axis.text.y = element_text(size = rel(1.5)),
-      axis.title.x = element_text(size = rel(1.5))
+    scale_x_continuous(
+      breaks = seq(time_min, time_max, by = 200),
+      limits = c(time_min, time_max)
+    ) +
+    labs(
+      title = "Original amplitude",
+      x = "Time (ms)",
+      y = "Amplitude (z-score)"
+    ) +
+    theme_white_compact(
+      base_size = base_size,
+      base_family = base_family
     )
   
-
-  coefficient_plot <- ggplot(combined %>% filter(plot_type == "Coefficients"), aes(x = Time, y = y_value)) +
+  if (reverse_amp_y) {
+    p_col1 <- p_col1 +
+      scale_y_reverse(
+        limits = y1_limits,
+        breaks = y1_breaks
+      )
+  } else {
+    p_col1 <- p_col1 +
+      scale_y_continuous(
+        limits = rev(y1_limits),
+        breaks = y1_breaks
+      )
+  }
+  
+  p_col2 <- ggplot(
+    df_zoom,
+    aes(
+      x = time,
+      y = amp,
+      color = condition,
+      linetype = condition
+    )
+  ) +
+    geom_line(linewidth = 0.9) +
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      color = "black",
+      linewidth = 0.25
+    ) +
+    facet_wrap(
+      ~ region,
+      ncol = 1,
+      scales = "free_x",
+      drop = FALSE
+    ) +
+    ggh4x::facetted_pos_scales(
+      x = zoom_x_scales
+    ) +
+    scale_color_manual(
+      name = "Condition",
+      values = style$line_colors,
+      labels = style$line_labels,
+      guide = "none"
+    ) +
+    scale_linetype_manual(
+      name = "Condition",
+      values = style$line_lty,
+      labels = style$line_labels,
+      guide = "none"
+    ) +
+    labs(
+      title = "Selected time window",
+      x = "Time (ms)",
+      y = "Amplitude (z-score)"
+    ) +
+    theme_white_compact(
+      base_size = base_size,
+      base_family = base_family
+    )
+  
+  if (reverse_amp_y) {
+    p_col2 <- p_col2 +
+      scale_y_reverse(
+        limits = y2_limits,
+        breaks = y2_breaks
+      )
+  } else {
+    p_col2 <- p_col2 +
+      scale_y_continuous(
+        limits = rev(y2_limits),
+        breaks = y2_breaks
+      )
+  }
+  
+  p_col3 <- ggplot() +
     geom_point(
-      aes(color = condition, shape = condition),
-      size = 3,
-      alpha = 0.9
+      data = coef_points,
+      aes(
+        x = Time,
+        y = y_value,
+        shape = time_window
+      ),
+      color = style$coef_point_color,
+      size = 0.95,
+      alpha = 0.75
     ) +
     geom_line(
       data = smooth_lines,
-      aes(group = display_group),
-      color = "#9b5de5",
-      linewidth = 1.2,
-      alpha = 1
-    ) +
-    facet_wrap(~ display_group, scales = "fixed") +
-    scale_y_continuous(
-      name = "Coefficients",
-      breaks = scales::pretty_breaks(n = 6),
-      expand = expansion(mult = 0.05)
-    ) +
-    scale_x_continuous(
-      name = "Time (ms)",
-      breaks = seq(0, 1500, by = 10),
-      expand = expansion(mult = 0.02)
-    ) +
-    scale_color_manual(
-      name = NULL,
-      values = c(
-        "10" = "#FF8C00", 
-        "20" = "#3399FF", 
-        "40" = "#00CC99"
+      aes(
+        x = Time,
+        y = y_value,
+        group = region
       ),
-      breaks = c("10", "20", "40"),
-      labels = c("10 ms", "20 ms", "40 ms")
+      color = style$smooth_color,
+      linewidth = 1.0
+    ) +
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      color = "black",
+      linewidth = 0.25
+    ) +
+    facet_wrap(
+      ~ region,
+      ncol = 1,
+      scales = "free",
+      drop = FALSE
+    ) +
+    ggh4x::facetted_pos_scales(
+      x = zoom_x_scales
     ) +
     scale_shape_manual(
-      name = NULL,
-      values = c(
-        "10" = 15,
-        "20" = 16,
-        "40" = 17
-      ),
+      name = "Window",
+      values = style$coef_shapes,
       breaks = c("10", "20", "40"),
-      labels = c("10 ms", "20 ms", "40 ms")
+      labels = c("10 ms", "20 ms", "40 ms"),
+      guide = guide_legend(order = 3)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.5, alpha = 0.7) +
-    theme_minimal() +
-    theme(
-      strip.background = element_rect(fill = strip_fill, color = strip_fill, linewidth = 0.5),
-      strip.text = element_text(face = "bold", size = rel(1.5), color = "black"),
-      panel.border = element_rect(fill = "transparent", color = "black", linewidth = 1),
-      panel.spacing = unit(15, "pt"),
-      panel.grid.major = element_line(color = "grey92", linewidth = 0.4),
-      panel.grid.minor = element_blank(),
-      legend.position = "right",
-      legend.spacing = unit(0.2, "cm"),
-      legend.title = element_text(face = "bold", size = rel(1.2)),
-      legend.text = element_text(size = rel(1.2)),
-      axis.line = element_line(color = "black", linewidth = 0.5),
-      axis.ticks = element_line(color = "black", linewidth = 0.3),
-      axis.title.y = element_text(size = rel(1.5)),
-      axis.text.x = element_text(size = rel(1.5)),
-      axis.text.y = element_text(size = rel(1.5)),
-      axis.title.x = element_text(size = rel(1.5))
+    labs(
+      title = "Estimated coefficients",
+      x = "Time (ms)",
+      y = "Estimated coefficient"
+    ) +
+    theme_white_compact(
+      base_size = base_size,
+      base_family = base_family
     )
   
-
-  final_match_image_plot <- amplitude_plot + coefficient_plot +
-    plot_layout(nrow = 1, widths = c(1, 1)+ theme(text = element_text(family = "Arial")))
+  if (reverse_coef_y) {
+    p_col3 <- p_col3 +
+      scale_y_reverse(
+        breaks = function(x) pretty(x, n = 4)
+      )
+  } else {
+    p_col3 <- p_col3 +
+      scale_y_continuous(
+        breaks = function(x) pretty(x, n = 4)
+      )
+  }
   
-  final_match_image_plot
+  final_plot <- (p_col1 | p_col2 | p_col3) +
+    patchwork::plot_layout(
+      widths = plot_widths,
+      guides = "collect"
+    ) &
+    theme(
+      legend.position = "bottom",
+      legend.box = "vertical"
+    )
   
+  return(final_plot)
 }

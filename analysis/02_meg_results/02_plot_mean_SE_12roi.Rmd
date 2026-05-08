@@ -1,0 +1,119 @@
+# MEG mean ± SE time courses
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE
+)
+
+library(tidyverse)
+library(rprojroot)
+
+proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
+knitr::opts_knit$set(root.dir = proj_root)
+```
+
+## Load functions and set paths
+
+```{r}
+source("analysis/02_meg_results/meg_timecourse_plot_utils.R")
+
+dir_data <- "data/02_meg_results"
+dir_out  <- "figures/02_meg_results"
+
+ensure_dir(dir_out)
+```
+
+## Action binding
+
+```{r}
+dat_action <- bind_rows(
+  read_tc_summary(
+    path = file.path(dir_data, "ta_action_va_12.csv"),
+    condition_label = "Voluntary",
+    roi_order = roi12
+  ),
+  read_tc_summary(
+    path = file.path(dir_data, "ta_action_ia_12.csv"),
+    condition_label = "Involuntary",
+    roi_order = roi12
+  )
+)
+
+p_action <- plot_mean_SE_tc(
+  dat = dat_action,
+  pal_line = pal_action_line,
+  pal_fill = pal_action_fill,
+  title_text = "Action binding",
+  ncol = 4,
+  ribbon_order = c("Involuntary", "Voluntary"),
+  ribbon_alpha = c(
+    "Voluntary" = 0.44,
+    "Involuntary" = 0.40
+  ),
+  border_lw = 0.42
+)
+
+p_action
+
+
+```
+
+## Outcome binding
+
+```{r}
+dat_outcome <- bind_rows(
+  read_tc_summary(
+    path = file.path(dir_data, "ta_outcome_vs_12.csv"),
+    condition_label = "Voluntary",
+    roi_order = roi12
+  ),
+  read_tc_summary(
+    path = file.path(dir_data, "ta_outcome_is_12.csv"),
+    condition_label = "Involuntary",
+    roi_order = roi12
+  )
+)
+
+p_outcome <- plot_mean_SE_tc(
+  dat = dat_outcome,
+  pal_line = pal_outcome_line,
+  pal_fill = pal_outcome_fill,
+  title_text = "Outcome binding",
+  ncol = 4,
+  ribbon_order = c("Involuntary", "Voluntary"),
+  ribbon_alpha = c(
+    "Voluntary" = 0.46,
+    "Involuntary" = 0.48
+  ),
+  border_lw = 0.42
+)
+
+p_outcome
+
+
+```
+
+
+## Save
+```{r}
+ggsave(
+  filename = file.path(dir_out, "action_binding_mean_SE_12roi.pdf"),
+  plot = p_action,
+  width = 12,
+  height = 9,
+  units = "in",
+  device = cairo_pdf
+)
+
+
+ggsave(
+  filename = file.path(dir_out, "outcome_binding_mean_SE_12roi.pdf"),
+  plot = p_outcome,
+  width = 12,
+  height = 9,
+  units = "in",
+  device = cairo_pdf
+)
+```
+

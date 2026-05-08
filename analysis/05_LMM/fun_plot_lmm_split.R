@@ -1,775 +1,541 @@
 # =========================================
 # fun_plot_lmm_split.R
-# Plotting utilities for significant LMM results
+# ITPC-only coefficient forest plots for LMM results
 # =========================================
+
 suppressPackageStartupMessages({
   library(dplyr)
-  library(ggplot2)
+  library(tidyr)
   library(purrr)
   library(stringr)
-  library(ggeffects)
-  library(ggnewscale)
+  library(ggplot2)
+  library(patchwork)
 })
 
-pretty_term_label <- function(term) {
-  term %>%
-    gsub("_bandITPC$", "-band ITPC", .) %>%
-    gsub("_bandPower$", "-band power", .) %>%
-    gsub("^meanAmplitude$", "Mean amplitude", .)
+# -------------------------
+# Default colors
+# -------------------------
+col_ns   <- "#B8B8B8"
+col_zero <- "#B0B0B0"
+col_text <- "#222222"
+
+# -------------------------
+# ITPC terms
+# -------------------------
+itpc_terms_all <- c(
+  "Delta_bandITPC",
+  "Theta_bandITPC",
+  "Alpha_bandITPC",
+  "Beta_bandITPC"
+)
+
+itpc_term_labels <- c(
+  Delta_bandITPC = "Delta",
+  Theta_bandITPC = "Theta",
+  Alpha_bandITPC = "Alpha",
+  Beta_bandITPC  = "Beta"
+)
+
+# -------------------------
+# String helpers
+# -------------------------
+clean_name <- function(x) {
+  x %>%
+    as.character() %>%
+    tolower() %>%
+    stringr::str_replace_all("[^a-z0-9]+", "")
 }
 
-# =========================================
-# 1) Forest plot (vertical x=term, y=estimate)
-# =========================================
-plot_forest_vertical_split <- function(
-    split_res,
-    p_cut = 0.05,
-    conditions = c("va_a","ia_a"),
-    cond_labels = c(va_a = "Voluntary", ia_a = "Involuntary"),
-    terms_select = NULL,
-    
-    ci_level = 0.95,
-    point_size = 4.8,
-    line_width  = 1.8,
-    dodge_width = 0.50,
-    
-    point_colors = c(Voluntary="#bc3908", Involuntary="#1F77B4"),
-    point_shapes = c(Voluntary=16, Involuntary=17),
-    line_types   = c(Voluntary="solid", Involuntary="dashed"),
-    
-    add_p_labels = TRUE,
-    p_digits = 3,
-    h_value = 0.20,
-    
-    zero_linetype = "dashed",
-    zero_linewidth = 0.9,
-    
-    ylim = NULL
-) {
-  models <- split_res$models
-  conditions <- intersect(conditions, names(models))
-  stopifnot(length(conditions) > 0)
-  
-  # ---- collect fixef ----
-  get_fixef_df <- function(m, cond) {
-    sm <- summary(m)
-    coefs <- as.data.frame(sm$coefficients)
-    coefs$term <- rownames(coefs)
-    rownames(coefs) <- NULL
-    
-    alpha <- 1 - ci_level
-    z <- qnorm(1 - alpha/2)
-    
-    coefs %>%
-      transmute(
-        condition_raw = cond,
-        term = term,
-        estimate = .data[["Estimate"]],
-        se = .data[["Std. Error"]],
-        p = .data[["Pr(>|t|)"]],
-        conf.low  = estimate - z * se,
-        conf.high = estimate + z * se
-      )
+label_for_condition <- function(cond_labels, cond) {
+  if (!is.null(names(cond_labels)) && cond %in% names(cond_labels)) {
+    return(unname(cond_labels[[cond]]))
   }
-  
-  df <- map_dfr(conditions, ~ get_fixef_df(models[[.x]], .x)) %>%
-    filter(term != "(Intercept)") %>%
-    mutate(
-      condition = factor(condition_raw, levels = conditions, labels = cond_labels[conditions]),
-      sig = !is.na(p) & p < p_cut,
-      est_plot  = ifelse(sig, estimate, NA_real_),
-      low_plot  = ifelse(sig, conf.low,  NA_real_),
-      high_plot = ifelse(sig, conf.high, NA_real_)
-    )
-  
-  if (!is.null(terms_select)) {
-    terms_select <- intersect(terms_select, unique(df$term))
-    stopifnot(length(terms_select) > 0)
-    df <- df %>% filter(term %in% terms_select)
-  }
-  
-  term_levels <- unique(df$term)
-  term_labels <- setNames(sapply(term_levels, pretty_term_label), term_levels)
-  df <- df %>% mutate(term_f = factor(term, levels = term_levels))
-  
-  pd <- position_dodge(width = dodge_width)
-  
-  p <- ggplot(df, aes(x = term_f, y = est_plot,
-                      color = condition, shape = condition, linetype = condition)) +
-    geom_hline(yintercept = 0, linewidth = zero_linewidth, linetype = zero_linetype) +
-    geom_errorbar(aes(ymin = low_plot, ymax = high_plot),
-                  width = 0, linewidth = line_width, position = pd, na.rm = TRUE) +
-    geom_point(size = point_size, position = pd, na.rm = TRUE) +
-    scale_color_manual(values = point_colors) +
-    scale_shape_manual(values = point_shapes) +
-    scale_linetype_manual(values = line_types) +
-    scale_x_discrete(labels = function(x) str_wrap(term_labels[x], width = 12)) +
-    labs(x = NULL, y = "Fixed effects") +
-    theme_classic() +
-    theme(
-      legend.position = "top",
-      legend.title = element_blank(),
-      legend.text = element_text(size = 28, face = "bold"),
-      axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5, size = 30, color = "black", face = "bold"),
-      axis.text.y = element_text(size = 30, color = "black", face = "bold"),
-      axis.title.y = element_text(size = 30, face = "bold", color = "black"),
-      axis.line = element_line(linewidth = 1.1),
-      axis.ticks = element_line(linewidth = 1.0)
-    ) +
-    guides(
-      color = guide_legend(
-        override.aes = list(
-          linetype = c("solid", "dashed"),
-          shape = c(16, 17)
-        )
-      ),
-      shape = "none",
-      linetype = "none"
-    )
-  
-  if (!is.null(ylim)) p <- p + coord_cartesian(ylim = ylim)
-  
-  if (isTRUE(add_p_labels)) {
-    df_annot <- df %>%
-      filter(sig) %>%
-      mutate(
-        lab = case_when(
-          is.na(p) ~ "p=NA",
-          p < 0.001 ~ "p<0.001",
-          TRUE ~ paste0("p=", formatC(p, format="f", digits=p_digits))
-        )
-      )
-    
-    p <- p +
-      geom_text(
-        data = df_annot,
-        aes(label = lab),
-        position = pd,
-        vjust = -1,
-        hjust = h_value,
-        size = 8,
-        show.legend = FALSE,
-        angle = 90,
-        fontface = "bold"
-      )
-  }
-  
-  p
+  cond
 }
 
-# =========================================
-# 2) Partial residual overlay (two conditions)
-# =========================================
-plot_partial_overlay_split <- function(
-    split_res,
-    term,
-    conditions = c("va_a","ia_a"),
-    xlim = NULL,
-    
-    subj_mean_points = TRUE,
-    n_grid = 120,
-    ci_level = 0.95,
-    
-    point_size = 5,
-    point_alpha = 1,
-    line_width = 2,
-    ribbon_alpha = 0.30,
-    
-    point_colors  = c(va_a = "#bc3908", ia_a = "#1F77B4"),
-    line_colors   = c(va_a = "#fb8500", ia_a = "#08519C"),
-    ribbon_colors = c(va_a = "#ffd29d", ia_a = "#BDD7E7"),
-    point_shapes  = c(va_a = 16, ia_a = 17),
-    line_types    = c(va_a = "solid", ia_a = "dashed"),
-    point_label   = c(va_a = "Voluntary", ia_a = "Involuntary"),
-    
-    legend_position = c(0.02, 0.98),
-    add_annot = FALSE,
-    annotate_x = NULL,
-    annotate_y = NULL,
-    annot_text = NULL
-) {
-  df <- split_res$data
-  models <- split_res$models
-  conditions <- intersect(conditions, names(models))
-  stopifnot(length(conditions) > 0)
-  
-  # ---- points ----
-  pts_all <- map_dfr(conditions, function(cond) {
-    m <- models[[cond]]
-    d <- df %>% filter(condition == cond)
-    stopifnot(term %in% names(d))
-    stopifnot(term %in% names(fixef(m)))
-    
-    b <- unname(fixef(m)[term])
-    
-    pts <- d %>%
-      transmute(
-        condition = cond,
-        subject = subject,
-        x = .data[[term]],
-        y = residuals(m) + b * .data[[term]]
-      )
-    
-    if (isTRUE(subj_mean_points)) {
-      pts <- pts %>%
-        group_by(condition, subject) %>%
-        summarise(x = mean(x, na.rm = TRUE),
-                  y = mean(y, na.rm = TRUE),
-                  .groups = "drop")
-    }
-    pts
-  })
-  
-  if (is.null(xlim)) xlim <- range(pts_all$x, na.rm = TRUE)
-  
-  # ---- effect lines/bands ----
-  eff_all <- map_dfr(conditions, function(cond) {
-    m <- models[[cond]]
-    stopifnot(term %in% names(fixef(m)))
-    
-    x_seq <- seq(xlim[1], xlim[2], length.out = n_grid)
-    newdata <- setNames(data.frame(x_seq), term)
-    
-    pred <- ggpredict(
-      m,
-      terms = newdata,
-      type = "fixed",
-      typical = "zero",
-      ci_level = ci_level
-    ) %>% as.data.frame()
-    
-    b0 <- unname(fixef(m)["(Intercept)"])
-    
-    pred %>%
-      transmute(
-        condition = cond,
-        x = x,
-        y = predicted - b0,
-        ymin = conf.low - b0,
-        ymax = conf.high - b0
-      )
-  })
-  
-  # remap display labels
-  pts_all$condition <- factor(pts_all$condition, levels = conditions, labels = point_label[conditions])
-  eff_all$condition <- factor(eff_all$condition, levels = conditions, labels = point_label[conditions])
-  
-  # remap style vectors to display labels
-  remap <- function(v) { out <- v[conditions]; names(out) <- point_label[conditions]; out }
-  pc <- remap(point_colors)
-  lc <- remap(line_colors)
-  rc <- remap(ribbon_colors)
-  ps <- remap(point_shapes)
-  lt <- remap(line_types)
-  
-  p <- ggplot() +
-    geom_ribbon(
-      data = eff_all,
-      aes(x = x, ymin = ymin, ymax = ymax, fill = condition),
-      alpha = ribbon_alpha,
-      show.legend = FALSE
-    ) +
-    scale_fill_manual(values = rc, guide = "none") +
-    
-    ggnewscale::new_scale_color() +
-    geom_line(
-      data = eff_all,
-      aes(x = x, y = y, color = condition, linetype = condition),
-      linewidth = line_width,
-      show.legend = FALSE
-    ) +
-    scale_color_manual(values = lc, guide = "none") +
-    scale_linetype_manual(values = lt, guide = "none") +
-    
-    ggnewscale::new_scale_color() +
-    geom_point(
-      data = pts_all,
-      aes(x = x, y = y, color = condition, shape = condition),
-      size = point_size,
-      alpha = point_alpha
-    ) +
-    scale_color_manual(values = pc, name = NULL) +
-    scale_shape_manual(values = ps, name = NULL) +
-    coord_cartesian(xlim = xlim) +
-    labs(x = paste0(pretty_term_label(term), " (z-score)"), y = NULL) +
-    theme_minimal() +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "black", linewidth = 1.1),
-      axis.ticks = element_line(color = "black", linewidth = 1),
-      axis.title.x = element_text(size = 30, face = "bold"),
-      axis.text.x  = element_text(size = 30, color = "black", face = "bold"),
-      axis.text.y  = element_text(size = 30, face = "bold", color = "black"),
-      axis.title.y = element_text(size = 30, face = "bold"),
-      legend.position = legend_position,
-      legend.justification = c(0, 1),
-      legend.background = element_rect(fill = NA, colour = NA),
-      legend.key = element_rect(fill = NA, colour = NA),
-      legend.title = element_blank(),
-      legend.text = element_text(size = 28)
-    ) +
-    guides(
-      color = guide_legend(
-        override.aes = list(linetype = 0, size = point_size, alpha = 1, shape = unname(ps))
-      ),
-      shape = "none"
-    )
-  
-  if (isTRUE(add_annot)) {
-    ax <- if (!is.null(annotate_x)) annotate_x else (xlim[1] + 0.05 * diff(xlim))
-    ay <- if (!is.null(annotate_y)) annotate_y else max(pts_all$y, na.rm = TRUE)
-    lab <- if (!is.null(annot_text)) annot_text else ""
-    p <- p + annotate("text", x = ax, y = ay, label = lab, hjust = 0, size = 8, fontface = "bold")
+stat_match <- function(x_clean, stat) {
+  if (stat == "estimate") {
+    return(str_detect(x_clean, "estimate|coefficient|coef|beta|^b$"))
+  }
+  if (stat == "std.error") {
+    return(str_detect(x_clean, "stderr|stderror|standarderror|se"))
+  }
+  if (stat == "p.value") {
+    return(str_detect(x_clean, "pvalue|pval|^p$|^pr"))
+  }
+  if (stat == "conf.low") {
+    return(str_detect(x_clean, "conflow|cilow|lower|lowerci|lwr"))
+  }
+  if (stat == "conf.high") {
+    return(str_detect(x_clean, "confhigh|cihigh|upper|upperci|upr"))
   }
   
-  p
+  rep(FALSE, length(x_clean))
 }
 
-# =========================================
-# 3) Partial residual (significant term)
-# =========================================
-plot_partial_residual <- function(
-    split_res,
-    p_cut = 0.05,
-    terms_select = NULL,
-    cond_select = NULL,
-    xlim_list = NULL,
-    
-    point_colors,
-    line_colors,
-    ribbon_colors,
-    point_shapes = NULL,
-    line_types   = NULL,
-    
-    point_size = 2.2,
-    point_alpha = 1,
-    line_width = 1.2,
-    ribbon_alpha = 0.3,
-    
-    n_grid = 100,
-    ci_level = 0.95,
-    subj_mean_points = TRUE,
-    
-    point_label = NULL,
-    legend_position_list = NULL,
-    annotate_x = NULL,
-    annotate_y = NULL
-) {
+find_first_col <- function(nms, patterns) {
+  x_clean <- clean_name(nms)
   
-  df <- split_res$data
-  models <- split_res$models
-  fixed_table <- split_res$fixed_table
+  idx <- which(x_clean %in% clean_name(patterns))
+  if (length(idx) > 0) return(nms[idx[1]])
   
-  sig_tbl <- fixed_table %>%
-    filter(term != "(Intercept)", !is.na(p_value), p_value < p_cut)
+  idx <- which(str_detect(x_clean, paste(clean_name(patterns), collapse = "|")))
+  if (length(idx) > 0) return(nms[idx[1]])
   
-  if (!is.null(terms_select)) {
-    sig_tbl <- sig_tbl %>% filter(term %in% terms_select)
-  }
+  NA_character_
+}
+
+find_stat_cond_col <- function(nms, stat, cond, cond_label = NULL) {
+  x_clean <- clean_name(nms)
+  cond_keys <- unique(clean_name(c(cond, cond_label)))
+  cond_keys <- cond_keys[!is.na(cond_keys) & cond_keys != ""]
   
-  if (!is.null(cond_select)) {
-    stopifnot(length(cond_select) == 1)
-    sig_tbl <- sig_tbl %>% filter(condition == cond_select)
-  }
+  stat_idx <- which(stat_match(x_clean, stat))
+  cond_idx <- which(map_lgl(x_clean, function(z) {
+    any(str_detect(z, fixed(cond_keys)))
+  }))
   
-  if (nrow(sig_tbl) == 0) {
-    warning("No significant predictors found under current filters.")
+  idx <- intersect(stat_idx, cond_idx)
+  
+  if (length(idx) > 0) return(nms[idx[1]])
+  NA_character_
+}
+
+# -------------------------
+# Standardize fixed-effect tables
+# -------------------------
+standardize_long_table <- function(tab, roi, conditions, cond_labels) {
+  nms <- names(tab)
+  
+  term_col <- find_first_col(nms, c("term", "effect", "predictor", "variable"))
+  cond_col <- find_first_col(nms, c("condition", "cond", "group"))
+  
+  if (is.na(term_col) || is.na(cond_col)) {
     return(NULL)
   }
   
-  plot_one <- function(cond, term) {
-    if (!cond %in% names(models)) return(NULL)
-    
-    m <- models[[cond]]
-    d <- df %>% filter(condition == cond)
-    
-    if (!term %in% names(d)) return(NULL)
-    if (!term %in% names(fixef(m))) return(NULL)
-    
-    b0 <- unname(fixef(m)["(Intercept)"])
-    b  <- unname(fixef(m)[term])
-    
-    pt_col <- point_colors[[cond]]
-    ln_col <- line_colors[[cond]]
-    rb_col <- ribbon_colors[[cond]]
-    
-    shp <- if (!is.null(point_shapes) && cond %in% names(point_shapes)) point_shapes[[cond]] else 16
-    lty <- if (!is.null(line_types)   && cond %in% names(line_types))   line_types[[cond]]   else "solid"
-    
-    pts <- d %>%
-      transmute(
-        subject = subject,
-        condition = cond,
-        x = .data[[term]],
-        y = residuals(m) + b * .data[[term]]
-      )
-    
-    if (isTRUE(subj_mean_points)) {
-      pts <- pts %>%
-        group_by(subject, condition) %>%
-        summarise(
-          x = mean(x, na.rm = TRUE),
-          y = mean(y, na.rm = TRUE),
-          .groups = "drop"
-        )
-    }
-    
-    x_rng <- if (!is.null(xlim_list) && term %in% names(xlim_list)) {
-      xlim_list[[term]]
-    } else {
-      range(pts$x, na.rm = TRUE)
-    }
-    
-    x_seq <- seq(x_rng[1], x_rng[2], length.out = n_grid)
-    newdata <- setNames(data.frame(x_seq), term)
-    
-    pred <- ggpredict(
-      m,
-      terms = newdata,
-      type = "fixed",
-      typical = "zero",
-      ci_level = ci_level
-    ) %>% as.data.frame()
-    
-    if (nrow(pred) == 0) return(NULL)
-    
-    eff <- pred %>%
-      transmute(
-        x = x,
-        y = predicted - b0,
-        ymin = conf.low - b0,
-        ymax = conf.high - b0
-      )
-    
-    cond_label <- if (!is.null(point_label) && cond %in% names(point_label)) point_label[[cond]] else cond
-    leg_pos <- if (!is.null(legend_position_list) && term %in% names(legend_position_list)) {
-      legend_position_list[[term]]
-    } else c(0.02, 0.98)
-    
-    ax <- if (!is.null(annotate_x) && term %in% names(annotate_x)) annotate_x[[term]] else (x_rng[1] + 0.65 * diff(x_rng))
-    ay <- if (!is.null(annotate_y) && term %in% names(annotate_y)) annotate_y[[term]] else (min(pts$y, na.rm = TRUE) + 0.2 * diff(range(pts$y, na.rm = TRUE)))
-    
-    ggplot() +
-      geom_ribbon(
-        data = eff,
-        aes(x = x, ymin = ymin, ymax = ymax),
-        fill = rb_col,
-        alpha = ribbon_alpha,
-        show.legend = FALSE
-      ) +
-      geom_line(
-        data = eff,
-        aes(x = x, y = y),
-        color = ln_col,
-        linetype = lty,
-        linewidth = line_width,
-        show.legend = FALSE
-      ) +
-      geom_point(
-        data = pts,
-        aes(x = x, y = y, color = condition),
-        shape = shp,
-        size = point_size,
-        alpha = point_alpha
-      ) +
-      coord_cartesian(xlim = x_rng) +
-      scale_color_manual(
-        values = setNames(pt_col, cond),
-        breaks = cond,
-        labels = cond_label,
-        name = NULL
-      ) +
-      guides(
-        color = guide_legend(
-          override.aes = list(shape = shp, size = point_size, alpha = 1),
-          title = NULL
-        )
-      ) +
-      labs(
-        x = paste0(pretty_term_label(term), " (z-score)"),
-        y = NULL
-      ) +
-      annotate(
-        "text",
-        x = ax,
-        y = ay,
-        hjust = 0,
-        label = paste0("Slope = ", round(b, 3)),
-        size = 8,
-        fontface = "bold"
-      ) +
-      theme_minimal() +
-      theme(
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.line = element_line(color = "black", linewidth = 1.1),
-        axis.ticks = element_line(color = "black", linewidth = 1),
-        axis.title.x = element_text(size = 30, face = "bold"),
-        axis.text.x  = element_text(size = 30, color = "black", face = "bold"),
-        axis.text.y  = element_text(size = 30, face = "bold", color = "black"),
-        axis.title.y = element_text(size = 30, face = "bold"),
-        legend.position = leg_pos,
-        legend.justification = c(0, 1),
-        legend.background = element_rect(fill = NA, colour = NA),
-        legend.key = element_rect(fill = NA, colour = NA),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 28)
-      )
-  }
+  estimate_col <- find_first_col(nms, c("estimate", "beta", "coef", "coefficient"))
+  se_col       <- find_first_col(nms, c("std.error", "stderr", "standarderror", "se"))
+  p_col        <- find_first_col(nms, c("p.value", "pvalue", "pval", "p", "Pr(>|t|)"))
+  low_col      <- find_first_col(nms, c("conf.low", "conflow", "ci.low", "cilow", "lower", "lowerci"))
+  high_col     <- find_first_col(nms, c("conf.high", "confhigh", "ci.high", "cihigh", "upper", "upperci"))
   
-  sig_pairs <- sig_tbl %>%
-    distinct(condition, term) %>%
-    arrange(term, condition)
+  out <- tibble(
+    ROI = roi,
+    condition_raw = as.character(tab[[cond_col]]),
+    term = as.character(tab[[term_col]]),
+    estimate = if (!is.na(estimate_col)) suppressWarnings(as.numeric(tab[[estimate_col]])) else NA_real_,
+    std.error = if (!is.na(se_col)) suppressWarnings(as.numeric(tab[[se_col]])) else NA_real_,
+    p.value = if (!is.na(p_col)) suppressWarnings(as.numeric(tab[[p_col]])) else NA_real_,
+    conf.low = if (!is.na(low_col)) suppressWarnings(as.numeric(tab[[low_col]])) else NA_real_,
+    conf.high = if (!is.na(high_col)) suppressWarnings(as.numeric(tab[[high_col]])) else NA_real_
+  )
   
-  plots <- sig_pairs %>%
+  out %>%
     mutate(
-      key  = paste0(condition, "_", term),
-      plot = map2(condition, term, plot_one)
+      condition = map_chr(condition_raw, function(x) {
+        xc <- clean_name(x)
+        
+        hit <- conditions[clean_name(conditions) == xc]
+        if (length(hit) == 1) return(hit)
+        
+        hit <- conditions[clean_name(unname(cond_labels[conditions])) == xc]
+        if (length(hit) == 1) return(hit)
+        
+        x
+      })
     ) %>%
-    filter(!map_lgl(plot, is.null)) %>%
-    { setNames(.$plot, .$key) }
-  
-  plots
+    filter(condition %in% conditions) %>%
+    select(ROI, condition, term, estimate, std.error, p.value, conf.low, conf.high)
 }
 
-
-plot_split_term_overlay <- function(
-    split_res,
-    term,
-    conditions = NULL,
-    xlim = NULL,
-    n_grid = 120,
-    ci_level = 0.95,
-    
-    subj_mean_points = TRUE,
-    point_size = 2.5,
-    point_alpha = 1,
-    line_width = 1.2,
-    
-    point_colors  = NULL,
-    line_colors   = NULL,
-    ribbon_colors = NULL,
-    ribbon_alpha  = 0.30,
-    
-    point_shapes = NULL,
-    line_types   = NULL,
-    
-    legend_title = NULL,
-    legend_position = c(0.02, 0.98),
-    point_label = NULL,
-    
-    add_annot = TRUE,
-    annotate_x = NULL,
-    annotate_y = NULL,
-    annot_digits = 3,
-    
-    h_value = 0.2
-) {
-
-  df <- split_res$data
-  models <- split_res$models
-
+standardize_wide_table <- function(tab, roi, conditions, cond_labels) {
+  nms <- names(tab)
   
-  if (is.null(conditions)) conditions <- names(models)
-  conditions <- intersect(conditions, names(models))
-
+  term_col <- find_first_col(nms, c("term", "effect", "predictor", "variable"))
   
-  # ---- build partial-residual points (per condition) ----
-  pts_all <- map_dfr(conditions, function(cond) {
-    m <- models[[cond]]
-    d <- df %>% filter(condition == cond)
-    
-    if (!term %in% names(d)) return(NULL)
-    if (!term %in% names(fixef(m))) return(NULL)
-    
-    b <- unname(fixef(m)[term])
-    
-    pts <- d %>%
-      transmute(
-        condition = cond,
-        subject = subject,
-        x = .data[[term]],
-        y = residuals(m) + b * .data[[term]]
-      )
-    
-    if (isTRUE(subj_mean_points)) {
-      pts <- pts %>%
-        group_by(condition, subject) %>%
-        summarise(
-          x = mean(x, na.rm = TRUE),
-          y = mean(y, na.rm = TRUE),
-          .groups = "drop"
-        )
+  if (is.na(term_col)) {
+    if (!is.null(rownames(tab)) && !all(rownames(tab) == as.character(seq_len(nrow(tab))))) {
+      tab <- tab %>% mutate(term = rownames(tab), .before = 1)
+      term_col <- "term"
+      nms <- names(tab)
+    } else {
+      stop("Cannot find a term/effect/predictor column in fixed_table_wide.")
     }
-    pts
+  }
+  
+  map_dfr(conditions, function(cond) {
+    cond_label <- label_for_condition(cond_labels, cond)
+    
+    est_col  <- find_stat_cond_col(nms, "estimate",  cond, cond_label)
+    se_col   <- find_stat_cond_col(nms, "std.error", cond, cond_label)
+    p_col    <- find_stat_cond_col(nms, "p.value",   cond, cond_label)
+    low_col  <- find_stat_cond_col(nms, "conf.low",  cond, cond_label)
+    high_col <- find_stat_cond_col(nms, "conf.high", cond, cond_label)
+    
+    tibble(
+      ROI = roi,
+      condition = cond,
+      term = as.character(tab[[term_col]]),
+      estimate = if (!is.na(est_col)) suppressWarnings(as.numeric(tab[[est_col]])) else NA_real_,
+      std.error = if (!is.na(se_col)) suppressWarnings(as.numeric(tab[[se_col]])) else NA_real_,
+      p.value = if (!is.na(p_col)) suppressWarnings(as.numeric(tab[[p_col]])) else NA_real_,
+      conf.low = if (!is.na(low_col)) suppressWarnings(as.numeric(tab[[low_col]])) else NA_real_,
+      conf.high = if (!is.na(high_col)) suppressWarnings(as.numeric(tab[[high_col]])) else NA_real_
+    )
   })
-  
-  if (nrow(pts_all) == 0) return(NULL)
-  
-  # ---- x-range ----
-  if (is.null(xlim)) xlim <- range(pts_all$x, na.rm = TRUE)
-  
-  # ---- fitted effect lines + CI ribbons (per condition) ----
-  eff_all <- map_dfr(conditions, function(cond) {
-    m <- models[[cond]]
-    d <- df %>% filter(condition == cond)
+}
+
+extract_fixed_long <- function(split_res, roi, conditions, cond_labels) {
+  if (!is.null(split_res$fixed_table_wide)) {
+    tab <- split_res$fixed_table_wide
     
-    if (!term %in% names(d)) return(NULL)
-    if (!term %in% names(fixef(m))) return(NULL)
+    long_try <- standardize_long_table(tab, roi, conditions, cond_labels)
+    if (!is.null(long_try) && nrow(long_try) > 0) {
+      out <- long_try
+    } else {
+      out <- standardize_wide_table(tab, roi, conditions, cond_labels)
+    }
     
-    x_seq <- seq(xlim[1], xlim[2], length.out = n_grid)
-    newdata <- setNames(data.frame(x_seq), term)
+  } else if (!is.null(split_res$fixed_table)) {
+    tab <- split_res$fixed_table
     
-    pred <- ggpredict(
-      m,
-      terms = newdata,
-      type = "fixed",
-      typical = "zero",
-      ci_level = ci_level
-    ) %>% as.data.frame()
+    long_try <- standardize_long_table(tab, roi, conditions, cond_labels)
+    if (!is.null(long_try) && nrow(long_try) > 0) {
+      out <- long_try
+    } else {
+      out <- standardize_wide_table(tab, roi, conditions, cond_labels)
+    }
     
-    if (nrow(pred) == 0) return(NULL)
-    
-    b0 <- unname(fixef(m)["(Intercept)"])
-    
-    pred %>%
-      transmute(
-        condition = cond,
-        x = x,
-        y = predicted - b0,
-        ymin = conf.low - b0,
-        ymax = conf.high - b0
-      )
-  })
-  
-  if (nrow(eff_all) == 0) return(NULL)
-  
-  # ---- label mapping (optional) ----
-  cond_show_levels <- conditions
-  if (!is.null(point_label)) {
-    pts_all$condition <- factor(pts_all$condition, levels = conditions, labels = point_label[conditions])
-    eff_all$condition <- factor(eff_all$condition, levels = conditions, labels = point_label[conditions])
-    cond_show_levels <- point_label[conditions]
   } else {
-    pts_all$condition <- factor(pts_all$condition, levels = conditions)
-    eff_all$condition <- factor(eff_all$condition, levels = conditions)
+    stop("split_res does not contain fixed_table_wide or fixed_table.")
   }
   
-  # ---- remap aesthetics to displayed levels ----
-  remap_vec <- function(v) {
-    if (is.null(v)) return(NULL)
-    out <- v[conditions]
-    if (!is.null(point_label)) names(out) <- point_label[conditions]
-    out
-  }
-  
-  pc <- remap_vec(point_colors)
-  lc <- remap_vec(line_colors)
-  rc <- remap_vec(ribbon_colors)
-  ps <- remap_vec(point_shapes)
-  lt <- remap_vec(line_types)
-  
-  # ---- plot ----
-  p <- ggplot() +
-    geom_ribbon(
-      data = eff_all,
-      aes(x = x, ymin = ymin, ymax = ymax, fill = condition),
-      alpha = ribbon_alpha,
-      show.legend = FALSE
-    ) +
-    scale_fill_manual(values = rc, guide = "none") +
-    
-    ggnewscale::new_scale_color() +
-    geom_line(
-      data = eff_all,
-      aes(x = x, y = y, color = condition, linetype = condition),
-      linewidth = line_width,
-      show.legend = FALSE
-    ) +
-    scale_color_manual(values = lc, guide = "none") +
-    scale_linetype_manual(values = lt, guide = "none") +
-    
-    ggnewscale::new_scale_color() +
-    geom_point(
-      data = pts_all,
-      aes(x = x, y = y, color = condition, shape = condition),
-      size = point_size,
-      alpha = point_alpha
-    ) +
-    scale_color_manual(values = pc, name = legend_title) +
-    scale_shape_manual(values = ps, name = legend_title) +
-    coord_cartesian(xlim = xlim) +
-    labs(
-      title = NULL,
-      x = paste0(pretty_term_label(term), " (z-score)"),
-      y = NULL
-    ) +
-    theme_minimal() +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "black", linewidth = 1.1),
-      axis.ticks = element_line(color = "black", linewidth = 1),
-      axis.title.x = element_text(size = 30, face = "bold"),
-      axis.text.x  = element_text(size = 30, face = "bold", color = "black"),
-      axis.text.y  = element_text(size = 30, face = "bold", color = "black"),
-      axis.title.y = element_text(size = 30, face = "bold"),
-      legend.position = legend_position,
-      legend.justification = c(0, 1),
-      legend.background = element_rect(fill = NA, colour = NA),
-      legend.key = element_rect(fill = NA, colour = NA),
-      legend.title = element_blank(),
-      legend.text = element_text(size = 28)
-    ) +
-    guides(
-      color = guide_legend(
-        title = legend_title,
-        override.aes = list(
-          linetype = 0,
-          shape = unname(ps),
-          size = point_size,
-          alpha = 1
-        )
+  out %>%
+    mutate(
+      conf.low = if_else(
+        is.na(conf.low) & !is.na(estimate) & !is.na(std.error),
+        estimate - 1.96 * std.error,
+        conf.low
       ),
-      shape = "none"
+      conf.high = if_else(
+        is.na(conf.high) & !is.na(estimate) & !is.na(std.error),
+        estimate + 1.96 * std.error,
+        conf.high
+      )
+    )
+}
+
+match_itpc_term <- function(term_vec, terms_select) {
+  term_key <- clean_name(term_vec)
+  target_key <- clean_name(terms_select)
+  
+  map_chr(term_key, function(x) {
+    hit <- target_key[str_detect(x, fixed(target_key))]
+    if (length(hit) == 0) return(NA_character_)
+    hit[1]
+  })
+}
+
+# -------------------------
+# Build plotting data
+# -------------------------
+make_itpc_plot_data <- function(res_list, roi_order, conditions, cond_labels) {
+  term_lookup <- tibble(
+    term = itpc_terms_all,
+    term_key = clean_name(itpc_terms_all),
+    term_label = unname(itpc_term_labels[itpc_terms_all]),
+    y = rev(seq_along(itpc_terms_all))
+  )
+  
+  raw <- map_dfr(roi_order, function(roi) {
+    extract_fixed_long(
+      split_res = res_list[[roi]],
+      roi = roi,
+      conditions = conditions,
+      cond_labels = cond_labels
+    )
+  })
+  
+  raw2 <- raw %>%
+    mutate(term_key = match_itpc_term(term, itpc_terms_all)) %>%
+    filter(!is.na(term_key)) %>%
+    group_by(ROI, condition, term_key) %>%
+    slice(1) %>%
+    ungroup()
+  
+  grid <- tidyr::expand_grid(
+    ROI = roi_order,
+    condition = conditions,
+    term_key = term_lookup$term_key
+  )
+  
+  grid %>%
+    left_join(raw2, by = c("ROI", "condition", "term_key")) %>%
+    left_join(term_lookup, by = "term_key") %>%
+    mutate(
+      ROI = factor(ROI, levels = roi_order),
+      condition = factor(condition, levels = conditions),
+      condition_label = map_chr(as.character(condition), ~ label_for_condition(cond_labels, .x)),
+      sig = !is.na(p.value) & p.value < 0.05
+    )
+}
+
+format_p <- function(p) {
+  ifelse(
+    is.na(p),
+    "",
+    ifelse(p < 0.001, "p < .001", sprintf("p = %.3f", p))
+  )
+}
+
+# -------------------------
+# Single condition forest panel
+# -------------------------
+plot_condition_forest <- function(df,
+                                  roi,
+                                  cond,
+                                  cond_label,
+                                  cond_color,
+                                  show_y = TRUE,
+                                  title_size = 8.5,
+                                  cap_height = 0.16) {
+  
+  d <- df %>%
+    filter(as.character(ROI) == roi, as.character(condition) == cond) %>%
+    arrange(desc(y)) %>%
+    mutate(
+      plot_col = if_else(sig, cond_color, col_ns),
+      p_lab = if_else(sig, format_p(p.value), "")
     )
   
-  # ---- slope annotation (optional) ----
-  if (isTRUE(add_annot)) {
-    slope_df <- map_dfr(conditions, function(cond) {
-      m <- models[[cond]]
-      if (!term %in% names(fixef(m))) return(NULL)
-      data.frame(
-        cond = cond,
-        slope = unname(fixef(m)[term]),
-        stringsAsFactors = FALSE
-      )
-    })
+  xs <- c(d$conf.low, d$conf.high, d$estimate, 0)
+  xs <- xs[is.finite(xs)]
+  
+  if (length(xs) == 0) {
+    xlim <- c(-1, 1)
+  } else {
+    xlim <- range(xs, na.rm = TRUE)
     
-    if (nrow(slope_df) > 0) {
-      if (!is.null(point_label)) slope_df$cond <- point_label[slope_df$cond]
-      slope_df$cond <- factor(slope_df$cond, levels = cond_show_levels)
-      
-      slope_df <- slope_df %>%
-        arrange(cond) %>%
-        mutate(line = paste0(as.character(cond), ": slope = ", format(round(slope, annot_digits), nsmall = annot_digits))) 
-      
-      label_txt <- paste(slope_df$line, collapse = "\n")
-      
-      ax <- if (!is.null(annotate_x)) annotate_x else (xlim[1] + 0.05 * diff(xlim))
-      ay <- if (!is.null(annotate_y)) annotate_y else max(pts_all$y, na.rm = TRUE)
-      
-      p <- p + annotate(
-        "text",
-        x = ax, y = ay,
-        label = label_txt,
-        hjust = h_value,
-        size = 8,
-        fontface = "bold"
-      )
+    if (diff(xlim) == 0) {
+      pad <- max(0.15, abs(xlim[1]) * 0.3)
+    } else {
+      pad <- diff(xlim) * 0.18
     }
+    
+    xlim <- c(xlim[1] - pad, xlim[2] + pad)
   }
   
-  p
+  d <- d %>%
+    mutate(
+      p_x = case_when(
+        sig & !is.na(conf.high) & estimate >= 0 ~ conf.high + diff(xlim) * 0.04,
+        sig & !is.na(conf.low)  & estimate <  0 ~ conf.low  - diff(xlim) * 0.04,
+        TRUE ~ NA_real_
+      ),
+      p_hjust = if_else(estimate >= 0, 0, 1)
+    )
+  
+  ggplot(d, aes(y = y)) +
+    geom_vline(
+      xintercept = 0,
+      linetype = "dashed",
+      linewidth = 0.35,
+      color = col_zero
+    ) +
+    geom_segment(
+      data = d %>% filter(is.finite(conf.low), is.finite(conf.high)),
+      aes(
+        x = conf.low,
+        xend = conf.high,
+        yend = y,
+        color = plot_col
+      ),
+      linewidth = 0.58,
+      lineend = "round"
+    ) +
+    geom_segment(
+      data = d %>% filter(is.finite(conf.low)),
+      aes(
+        x = conf.low,
+        xend = conf.low,
+        y = y - cap_height,
+        yend = y + cap_height,
+        color = plot_col
+      ),
+      linewidth = 0.58,
+      lineend = "round"
+    ) +
+    geom_segment(
+      data = d %>% filter(is.finite(conf.high)),
+      aes(
+        x = conf.high,
+        xend = conf.high,
+        y = y - cap_height,
+        yend = y + cap_height,
+        color = plot_col
+      ),
+      linewidth = 0.58,
+      lineend = "round"
+    ) +
+    geom_point(
+      data = d %>% filter(is.finite(estimate)),
+      aes(
+        x = estimate,
+        fill = plot_col,
+        color = plot_col
+      ),
+      shape = 22,
+      size = 2.8,
+      stroke = 0.25
+    ) +
+    geom_text(
+      data = d %>% filter(sig, is.finite(p_x)),
+      aes(
+        x = p_x,
+        label = p_lab,
+        hjust = p_hjust,
+        color = plot_col
+      ),
+      size = 2.5,
+      vjust = 0.45
+    ) +
+    scale_color_identity() +
+    scale_fill_identity() +
+    scale_y_continuous(
+      breaks = d$y,
+      labels = if (show_y) d$term_label else rep("", nrow(d)),
+      limits = c(0.5, length(itpc_terms_all) + 0.5),
+      expand = expansion(mult = c(0.02, 0.02))
+    ) +
+    coord_cartesian(xlim = xlim, clip = "off") +
+    labs(
+      title = cond_label,
+      x = "Estimated coefficient",
+      y = NULL
+    ) +
+    theme_classic(base_family = "Arial", base_size = 8.5) +
+    theme(
+      plot.title = element_text(
+        color = cond_color,
+        face = "bold",
+        hjust = 0,
+        size = title_size,
+        margin = margin(b = 2)
+      ),
+      axis.title.x = element_text(
+        size = 8,
+        margin = margin(t = 4)
+      ),
+      axis.text.x = element_text(
+        size = 7,
+        color = col_text
+      ),
+      axis.text.y = element_text(
+        size = 7.5,
+        color = col_text
+      ),
+      axis.line.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.line.x = element_line(
+        linewidth = 0.35,
+        color = "#444444"
+      ),
+      axis.ticks.x = element_line(
+        linewidth = 0.3,
+        color = "#444444"
+      ),
+      plot.margin = margin(4, 18, 4, 4)
+    )
 }
+
+make_roi_label_plot <- function(roi) {
+  ggplot() +
+    annotate(
+      "text",
+      x = 1,
+      y = 0.5,
+      label = roi,
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial",
+      fontface = "bold",
+      size = 3.6,
+      color = col_text
+    ) +
+    xlim(0, 1) +
+    ylim(0, 1) +
+    theme_void() +
+    theme(
+      plot.margin = margin(4, 4, 4, 0)
+    )
+}
+
+plot_roi_pair <- function(df, roi, conditions, cond_labels, cond_colors) {
+  cond1 <- conditions[1]
+  cond2 <- conditions[2]
+  
+  p1 <- plot_condition_forest(
+    df = df,
+    roi = roi,
+    cond = cond1,
+    cond_label = label_for_condition(cond_labels, cond1),
+    cond_color = cond_colors[[cond1]],
+    show_y = TRUE
+  )
+  
+  p2 <- plot_condition_forest(
+    df = df,
+    roi = roi,
+    cond = cond2,
+    cond_label = label_for_condition(cond_labels, cond2),
+    cond_color = cond_colors[[cond2]],
+    show_y = TRUE
+  )
+  
+  roi_lab <- make_roi_label_plot(roi)
+  coef_block <- (p1 / p2) + plot_layout(heights = c(1, 1))
+  
+  (roi_lab | coef_block) +
+    plot_layout(widths = c(0.18, 1))
+}
+
+plot_group_itpc <- function(res_list,
+                            roi_order,
+                            conditions,
+                            cond_labels,
+                            cond_colors,
+                            group_title) {
+  
+  df <- make_itpc_plot_data(
+    res_list = res_list,
+    roi_order = roi_order,
+    conditions = conditions,
+    cond_labels = cond_labels
+  )
+  
+  roi_plots <- map(roi_order, function(roi) {
+    plot_roi_pair(
+      df = df,
+      roi = roi,
+      conditions = conditions,
+      cond_labels = cond_labels,
+      cond_colors = cond_colors
+    )
+  })
+  
+  wrap_plots(roi_plots, ncol = 1) +
+    plot_annotation(
+      title = group_title,
+      theme = theme(
+        plot.title = element_text(
+          family = "Arial",
+          face = "bold",
+          size = 13,
+          hjust = 0,
+          margin = margin(b = 8)
+        )
+      )
+    )
+}
+

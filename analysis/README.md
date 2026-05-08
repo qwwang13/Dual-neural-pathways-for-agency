@@ -25,13 +25,9 @@ Behavioral quantification of perceptual shift.
 
 Visualization of stimulus-locked MEG amplitude responses across conditions.
 
--   `run_action_amplitude_02_1.m` MEG amplitude (action onset) under voluntary and involuntary conditions.
+-   `02_plot_mean_SE_12roi.Rmd` Workflow for generating MEG amplitude figures.
 
--   `run_outcome_amplitude_02_2.m` MEG amplitude (outcome onset) under voluntary and involuntary conditions.
-
--   `run_probability_amplitude_02_3.m` MEG amplitude (outcome onset) under 75% and 50% probability conditions.
-
--   `plot3d_tc_from_csv.m` Visualization utility functions.
+-   `meg_timecourse_plot_utils.R` Utility functions for visualization.
 
 ------------------------------------------------------------------------
 
@@ -42,10 +38,6 @@ Functional linear regression modeling of behavioral outcomes using MEG signals a
 -   `03_1_action_binding_functional_regression.Rmd` Functional regression for action binding.
 
 -   `03_2_outcome_binding_functional_regression.Rmd` Functional regression for outcome binding.
-
--   `03_3_75_50_functional_regression.Rmd` Functional regression for 75% vs. 50% no-outcome conditions.
-
--   `03_4_50_functional_regression.Rmd` Functional regression for 50% outcome vs. no-outcome conditions.
 
 -   `elasticnet_functions.R` Modeling utilities.
 
@@ -106,7 +98,7 @@ Sequential workflow:
 
 3.  `run_plot_itpc_rose_all_ieeg_06_3.m` Phase visualization workflow. Uses `plot_itpc_rose_cartesian_ieeg.m`.
 
-4.  `06_4_ieeg.Rmd` Statistical validation in Postcentral-L and MTG-R. Tests whether MEG-derived features replicate in intracranial recordings. Uses `pearson_utils.R`.
+4.  `06_4_ieeg.Rmd` Statistical validation in MTG-R. Tests whether MEG-derived features replicate in intracranial recordings. Uses `pearson_utils.R`.
 
 Environment-specific files:
 

@@ -5,65 +5,71 @@ knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE
 )
+
 library(dplyr)
 library(tidyr)
 library(purrr)
 library(stringr)
 library(glmnet)
 library(readr)
+library(ggplot2)
+library(patchwork)
 library(ggh4x)
+library(rprojroot)
+
 proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
 knitr::opts_knit$set(root.dir = proj_root)
 ```
 
 ## Model results
+
 ### Functions
+
 ```{r}
-# Required functions
 source("analysis/03_functional_regression/elasticnet_functions.R")
 ```
 
 ### Inputs
+
 ```{r}
-# Required inputs
-name_binding <- "vss_iss_binding"
-name_condition   <- "vss_iss"
+name_binding   <- "vss_iss_binding"
+name_condition <- "vss_iss"
 
 brain_csv   <- "data/03_functional_regression/meg_outcome_difference.csv"
 binding_csv <- "data/03_functional_regression/perceptual_shift_difference.csv"
 
 out_filtered_csv <- "results/03_functional_regression/outcome_binding.csv"
-
 ```
 
 ### Settings
+
 ```{r}
-# Time range in ms
 time_lower_ms <- 0
 time_upper_ms <- 1000
 time_windows_ms <- c(10, 20, 40)
 
-# ElasticNet alpha grid for glmnet
 alpha_grid <- seq(0.1, 1.0, by = 0.1)
 
-# glmnet settings
 n_lambda <- 100
 intercepts <- c(TRUE, FALSE)
-
 ```
 
-
 ### Run
+
 ```{r}
-# 1) Read data
-brain_long <- read_csv(brain_csv, locale = locale(encoding = "UTF-8")) %>%
+brain_long <- read_csv(
+  brain_csv,
+  locale = locale(encoding = "UTF-8")
+) %>%
   filter(condition == name_condition) %>%
   mutate(region = make_region_label(region))
 
-binding_df <- read_csv(binding_csv, locale = locale(encoding = "UTF-8")) %>%
+binding_df <- read_csv(
+  binding_csv,
+  locale = locale(encoding = "UTF-8")
+) %>%
   select(subject, all_of(name_binding))
 
-# 2) Build binned features
 feature_df <- prep_brain_features(
   brain_long = brain_long,
   time_windows_ms = time_windows_ms,
@@ -71,10 +77,8 @@ feature_df <- prep_brain_features(
   time_upper_ms = time_upper_ms
 )
 
-# Optional: restrict to target regions
 regions <- sort(unique(feature_df$region))
 
-# 3) Fit ElasticNet grid (all lambdas)
 all_models <- run_elasticnet_grid(
   feature_df = feature_df,
   binding_df = binding_df,
@@ -84,26 +88,24 @@ all_models <- run_elasticnet_grid(
   intercepts = intercepts,
   binding_col = name_binding,
   n_lambda = n_lambda
-) %>% 
-  mutate(sort_col = case_when(
-    region == "Postcentral-L" ~ -alpha,
-    region == "MTG-R" ~ alpha,
-    TRUE ~ alpha
-  )) %>%
+) %>%
+  mutate(
+    sort_col = case_when(
+      region == "Postcentral-L" ~ -alpha,
+      region == "MTG-R" ~ alpha,
+      TRUE ~ alpha
+    )
+  ) %>%
   arrange(sort_col) %>%
   select(-sort_col)
 
-# saveRDS(all_models, out_all_rds)
-
-# 4) Filter by consecutive constraint
-# Consecutive constraint for filtering
 conti_p_list <- list(
-  'Postcentral-L' = list("10" = 4, "20" = 4, "40" = 3),    
-  'MTG-R' = list("10" = 7, "20" = 5, "40" = 5),
-  'Precuneus-R' = list("10" = 5, "20" = 3, "40" = 4),
-  'Precentral-R' = list("10" = 4, "20" = 3, "40" = 3),
-  'Postcentral-R' = list("10" = 5, "20" = 7, "40" = 6),
-  'SPG-L' = list("10" = 6, "20" = 9, "40" = 4)
+  "Postcentral-L" = list("10" = 4, "20" = 4, "40" = 3),
+  "MTG-R"         = list("10" = 7, "20" = 5, "40" = 5),
+  "Precuneus-R"   = list("10" = 5, "20" = 3, "40" = 4),
+  "Precentral-R"  = list("10" = 4, "20" = 3, "40" = 3),
+  "Postcentral-R" = list("10" = 5, "20" = 7, "40" = 6),
+  "SPG-L"         = list("10" = 6, "20" = 9, "40" = 4)
 )
 
 filtered_models <- filter_elasticnet_by_consecutive(
@@ -114,97 +116,139 @@ filtered_models <- filter_elasticnet_by_consecutive(
   consecutive_mode = "relaxed"
 )
 
-# 5) Post-filter by sparsity + overlap-run constraint
-# - Sparsity: per time_window (10/20/40 ms), total selected duration <= 200 ms
-# - Overlap-run: the triple-overlap (10 & 20 & 40) contains a continuous run >= 40 ms
-#   allowing up to 1–2 missing 10-ms bins (controlled by allowed_gap_bins)
 filtered_models_final <- post_filter_sparse_and_overlap_run(
   filtered_models = filtered_models,
   time_windows = c(10, 20, 40),
   max_window_ms = 280,
   min_overlap_run_ms = 40,
   allowed_gap_bins = 2
-) %>% 
-    mutate(
-  coef = pmap_dbl(list(coef, time_window), function(x, y) x/(as.numeric(y)/10))
-    ) %>% 
-  select(region,time_window,lower,upper,coef)
+) %>%
+  mutate(
+    coef = pmap_dbl(
+      list(coef, time_window),
+      function(x, y) x / (as.numeric(y) / 10)
+    )
+  ) %>%
+  select(region, time_window, lower, upper, coef)
 
-# Related ROI
 unique(filtered_models_final$region)
-
 ```
 
 ### Save
+
 ```{r}
 write_csv(filtered_models_final, out_filtered_csv)
 
 cat("Saved:\n", out_filtered_csv, "\n")
 ```
 
-
 ## Plot
 
 ### Functions
+
 ```{r}
 source("analysis/03_functional_regression/fun_plot_functional_regression.R")
 ```
 
 ### Inputs
+
 ```{r}
-out_pdf <- "figures/03_functional_regression/outcome_binding.pdf"
-meg_mean_name <- 'data/03_functional_regression/plot_data/meg_mean_outcome.csv'
+out_pdf_split <- "figures/03_functional_regression/outcome_binding.pdf"
 
+meg_mean_name <- "data/03_functional_regression/plot_data/meg_mean_outcome.csv"
+coef_csv      <- "results/03_functional_regression/outcome_binding.csv"
 
-
-df_meg_mean <- read_csv(meg_mean_name, locale = locale(encoding = "UTF-8"))
-regions_name <- c('Postcentral-L','MTG-R')
+regions_name <- c("Postcentral-L", "MTG-R")
 
 border_df <- tibble(
-    region = c('Postcentral-L','MTG-R'),
-    xmin = c(200,770),
-    xmax = c(300,830)
+  region = c("Postcentral-L", "MTG-R"),
+  xmin   = c(200, 770),
+  xmax   = c(300, 830)
+)
+
+condition_order <- c("vss_bs", "iss_bs", "vss_iss")
+
+smooth_span <- c(
+  "Postcentral-L" = 0.75,
+  "MTG-R" = 0.75
+)
+
+style <- list(
+  overlap_fill = c(
+    "1" = "grey94",
+    "2" = "grey88",
+    "3" = "grey73"
+  ),
+  line_colors = c(
+    "vss_bs"  = "#74C95C",
+    "iss_bs"  = "#F783A0",
+    "vss_iss" = "#ff4d6d"
+  ),
+  line_lty = c(
+    "vss_bs"  = 5,
+    "iss_bs"  = 5,
+    "vss_iss" = 1
+  ),
+  line_labels = c(
+    "vss_bs"  = "Voluntary",
+    "iss_bs"  = "Involuntary",
+    "vss_iss" = "Difference"
+  ),
+  coef_shapes = c(
+    "10" = 15,
+    "20" = 16,
+    "40" = 17
+  ),
+  coef_point_color = "grey50",
+  smooth_color = "#9b5de5"
 )
 ```
 
 ### Run
+
 ```{r}
-p_top <- plot_top_overlap_panel(
-  df_meg_mean = df_meg_mean,
-  coef_df = filtered_models_final,
+df_meg_mean_raw <- read_csv(
+  meg_mean_name,
+  show_col_types = FALSE,
+  locale = locale(encoding = "UTF-8")
+)
+
+coef_df_raw <- read_csv(
+  coef_csv,
+  show_col_types = FALSE,
+  locale = locale(encoding = "UTF-8")
+)
+
+final_plot <- plot_binding_by_columns(
+  df_meg_mean_raw = df_meg_mean_raw,
+  coef_df_raw = coef_df_raw,
   regions_name = regions_name,
+  border_df = border_df,
+  condition_order = condition_order,
+  style = style,
+  smooth_span = smooth_span,
   time_min = 0,
   time_max = 1000,
-  desired_order_condition = c("vss_bs","iss_bs","vss_iss"),
- style = list(overlap_fill = c("1"="grey90","2"="grey80","3"="grey40"),
-  line_colors  = c('iss_bs'="#42a5f5",'vss_bs'="#344fac",'vss_iss'="#ff4d6d"),
-  line_lty     = c('iss_bs'=5,'vss_bs'=5,'vss_iss'=1),
-  line_labels  = c('iss_bs'="Involuntary",'vss_bs'="Voluntary",'vss_iss'="Difference")
-                                   )
+  overlap_step_ms = 10,
+  reverse_amp_y = TRUE,
+  reverse_coef_y = TRUE
 )
 
-p_bottom <- plot_bottom_nested(
-  df_meg_mean = df_meg_mean,
-  coef_df = filtered_models_final,
-  border_df = border_df,
-  smooth_span = c("Postcentral-L"=0.75,"MTG-R"=0.75),
-  x_break = seq(0, 1000, by = 20),
- style = list(line_colors=c('iss_bs'="#42a5f5",'vss_bs'="#344fac",'vss_iss'="#ff4d6d"),
-   coef_shapes  = c("iss_bs"=NA,"vss_bs"=NA,"vss_iss"=NA),
-   linetype_map=c("iss_bs"="dashed","vss_bs"="dashed","vss_iss"="solid")
-   )
-)
-
-# ----------------------------
-# Combine
-# ----------------------------
-full_plot <- (p_top / p_bottom) + patchwork::plot_layout(nrow = 2, heights = c(1.4, 1))
+final_plot
 ```
-
 
 ### Save
+
 ```{r}
-ggsave(out_pdf, plot = full_plot,width = 9, height = 8, units = "in",device = cairo_pdf, family =  "Arial")
+ggsave(
+  out_pdf_split,
+  plot = final_plot,
+  width = 8.8,
+  height = 6.4,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial"
+)
 
+cat("Saved:\n", out_pdf_split, "\n")
 ```
-

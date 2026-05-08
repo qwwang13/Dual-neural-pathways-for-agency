@@ -1,4 +1,5 @@
 # temporal binding effect
+
 ```{r setup, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -6,110 +7,109 @@ knitr::opts_chunk$set(
 )
 
 library(tidyverse)
-library(ggplot2)
-library(gghalves) 
-# remotes::install_github("teunbrand/gghalves@compat_ggplot2_400")
 library(readr)
-library(dplyr)
-library(cols4all)
-library(patchwork)
 library(rprojroot)
+
 proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
 knitr::opts_knit$set(root.dir = proj_root)
 ```
 
 ## load data
+
 ```{r}
 source("analysis/01_temporal_binding_effect/temporal_binding_effect_utils.R")
+
 # ---------- paths ----------
 dir_pdf <- "figures/01_temporal_binding_effect"
 dir_res <- "results/01_temporal_binding_effect"
-ensure_dir(dir_pdf); ensure_dir(dir_res)
+
+ensure_dir(dir_pdf)
+ensure_dir(dir_res)
 
 # ---------- load processed data used in paper ----------
-perceptual_shift_action_outcome <- read_csv("data/01_temporal_binding_effect/perceptual_shift_action_outcome.csv", locale = locale(encoding = "UTF-8"))
-
-perceptual_shift_probability <- read_csv("data/01_temporal_binding_effect/perceptual_shift_probability.csv")
+perceptual_shift_action_outcome <- read_csv(
+  "data/01_temporal_binding_effect/perceptual_shift_action_outcome.csv",
+  locale = locale(encoding = "UTF-8")
+)
 ```
 
-
 ## Plot raw perceptual shift
+
 ```{r}
 df_action <- to_long(
   perceptual_shift_action_outcome,
-  cols   = c("va_ba", "ia_bi"),
+  cols = c("va_ba", "ia_bi"),
   levels = c("va_ba", "ia_bi"),
   labels = c("Voluntary", "Involuntary")
 )
 
 df_outcome <- to_long(
   perceptual_shift_action_outcome,
-  cols   = c("vs_bs", "is_bs"),
+  cols = c("vs_bs", "is_bs"),
   levels = c("vs_bs", "is_bs"),
   labels = c("Voluntary", "Involuntary")
 )
 
-df_without <- to_long(
-  perceptual_shift_probability,
-  cols   = c("a75_an_ba", "a50_an_ba"),
-  levels = c("a75_an_ba", "a50_an_ba"),
-  labels = c("75% probability\n(without outcome)", "50% probability\n(without outcome)")
-)
-
-df_50 <- to_long(
-  perceptual_shift_probability,
-  cols   = c("a50_an_ba", "a50_ay_ba"),
-  levels = c("a50_an_ba", "a50_ay_ba"),
-  labels = c("50% probability\n(without outcome)", "50% probability\n(with outcome)")
-)
-
 # palettes
-pal_action  <- c4a('10',6)[1:2]
-pal_outcome <- c4a('10',6)[3:4]
-pal_without <- c4a('10',6)[5:6]
-pal_50    <- c4a('10',8)[6:7]
+pal_action <- c("#006AB6", "#F28E2B")
+pal_outcome <- c("#59A14F", "#F28498")
 
-p_action  <- plot_halfviolin(df_action,  "Action", y_breaks = seq(-125, 175, 25), palette = pal_action)
-p_outcome <- plot_halfviolin(df_outcome, "Sound",  y_breaks = seq(-400,   0, 50), palette = pal_outcome)
-p_without <- plot_halfviolin(df_without, "Action", y_breaks = seq(-150, 175, 25), palette = pal_without)
-p_50    <- plot_halfviolin(df_50,    "Action", y_breaks = seq(-125, 175, 25), palette = pal_50)
+p_action <- plot_halfviolin(
+  df_action,
+  title = "Action",
+  y_breaks = seq(-150, 150, 50),
+  palette = pal_action
+)
+
+p_outcome <- plot_halfviolin(
+  df_outcome,
+  title = "Sound",
+  y_breaks = seq(-400, 0, 50),
+  palette = pal_outcome
+)
 
 p_action
 p_outcome
-p_without
-p_50
 
-# save PDFs only
-save_plot_pdf(p_action,  "action_binding",               dir_pdf)
-save_plot_pdf(p_outcome, "outcome_binding",              dir_pdf)
-save_plot_pdf(p_without, "75_vs_50_without_outcome",     dir_pdf)
-save_plot_pdf(p_50,    "50_without_vs_with_outcome",        dir_pdf)
+save_plot_pdf(
+  p_action,
+  stem = "action_binding",
+  dir_pdf = dir_pdf
+)
 
+save_plot_pdf(
+  p_outcome,
+  stem = "outcome_binding",
+  dir_pdf = dir_pdf
+)
 ```
 
 ## Condition comparisons
+
 ```{r}
-tests_paired <- bind_rows(
-  paired_tests(perceptual_shift_probability$a75_an_ba,  perceptual_shift_probability$a50_an_ba,
-                  "Without outcome: 75% vs 50%"),
-  paired_tests(perceptual_shift_probability$a75_ay_ba,  perceptual_shift_probability$a50_ay_ba,
-                  "With outcome: 75% vs 50%"),
-  paired_tests(perceptual_shift_probability$a50_ay_ba,  perceptual_shift_probability$a50_an_ba,
-                  "50%: With outcome vs Without outcome")
-)
-
 tests_one_sample <- bind_rows(
-  one_sample_tests(perceptual_shift_action_outcome$va_ba, "Action: Voluntary vs 0"),
-  one_sample_tests(perceptual_shift_action_outcome$ia_bi, "Action: Involuntary vs 0"),
-  one_sample_tests(perceptual_shift_action_outcome$vs_bs, "Outcome: Voluntary vs 0"),
-  one_sample_tests(perceptual_shift_action_outcome$is_bs, "Outcome: Involuntary vs 0")
+  one_sample_tests(
+    perceptual_shift_action_outcome$va_ba,
+    "Action: Voluntary vs 0"
+  ),
+  one_sample_tests(
+    perceptual_shift_action_outcome$ia_bi,
+    "Action: Involuntary vs 0"
+  ),
+  one_sample_tests(
+    perceptual_shift_action_outcome$vs_bs,
+    "Outcome: Voluntary vs 0"
+  ),
+  one_sample_tests(
+    perceptual_shift_action_outcome$is_bs,
+    "Outcome: Involuntary vs 0"
+  )
 )
 
-write_csv(tests_paired,     file.path(dir_res, "paired_tests.csv"))
-write_csv(tests_one_sample, file.path(dir_res, "one_sample_tests.csv"))
+write_csv(
+  tests_one_sample,
+  file.path(dir_res, "one_sample_tests.csv")
+)
 
-tests_paired
 tests_one_sample
-
 ```
-

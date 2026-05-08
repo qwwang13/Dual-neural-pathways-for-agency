@@ -41,7 +41,6 @@ dual-agency-pathways/
 │   ├── 03_functional_regression/
 │   ├── 04_network/
 │   ├── 05_LMM/
-│   ├── 06_ieeg/
 │   ├── README.md
 │
 ├── figures/

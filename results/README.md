@@ -59,35 +59,13 @@ Involuntary:
 
 ------------------------------------------------------------------------
 
-### Probability Manipulation (MEG)
 
-75% with outcome:
-
--   `a75_ay_ba`
-
-75% without outcome:
-
--   `a75_an_ba`
--   `a75_an`
-
-50% with outcome:
-
--   `a50_ay_ba`
--   `a50_ay`
-
-50% without outcome:
-
--   `a50_an_ba`
--   `a50_an`
-
-------------------------------------------------------------------------
 
 ### Difference Conditions (Baseline-Corrected Contrasts)
 
 -   Action binding (Voluntary − Involuntary): `vaa_iaa`
 -   Outcome binding (Voluntary − Involuntary): `vss_iss`
--   75% without outcome − 50% without outcome: `a75_a50_an`
--   50% with outcome − 50% without outcome: `a50_ay_an`
+
 
 ------------------------------------------------------------------------
 
@@ -106,9 +84,7 @@ Statistical evaluation of perceptual shift.
 
 -   `one_sample_tests.csv` One-sample t-tests against zero for each condition.
 
--   `paired_tests.csv` Paired comparisons between conditions. The `contrast` column specifies the compared conditions.
 
-Files include sample size, test statistics, and p-values.
 
 ------------------------------------------------------------------------
 
@@ -120,8 +96,7 @@ Files:
 
 -   `action_binding.csv`
 -   `outcome_binding.csv`
--   `75_50_without_outcome.csv`
--   `50_with_without_outcome.csv`
+
 
 Column definitions:
 
@@ -148,7 +123,7 @@ Files:
 
 -   `action_binding.csv`
 -   `outcome_binding.csv`
--   `75_50_without_outcome.csv`
+
 
 ------------------------------------------------------------------------
 
@@ -160,8 +135,7 @@ Files:
 
 -   `action_binding.csv`
 -   `outcome_binding.csv`
--   `75_50_without_outcome.csv`
--   `50_with_without_outcome.csv`
+
 
 Column definitions:
 
@@ -179,19 +153,4 @@ For each condition, the following columns are provided:
 
 ------------------------------------------------------------------------
 
-# 06_ieeg
 
-Pearson correlation results between sEEG-derived features and behavioral measures.
-
-File:
-
--   `ieeg_PostcentralL_pearson.csv`
-
-Column definitions:
-
--   `feature` -- Feature name
--   `n` -- Sample size
--   `r` -- Pearson correlation coefficient
--   `p` -- Associated p-value
-
-------------------------------------------------------------------------

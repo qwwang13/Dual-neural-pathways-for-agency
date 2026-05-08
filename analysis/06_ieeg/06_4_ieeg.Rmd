@@ -1,146 +1,57 @@
-# ieeg
+# iEEG
+
 ```{r setup, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE
 )
-  library(dplyr)
-  library(ggplot2)
-  library(ggExtra)
-  library(stringr)
-  library(readr)
-  library(ggplotify)  
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tibble)
+library(rprojroot)
+
 proj_root <- rprojroot::find_root(rprojroot::has_file_pattern("\\.Rproj$"))
 knitr::opts_knit$set(root.dir = proj_root)
 ```
 
+## Functions
 
-## PostcentralL
-### Functions
 ```{r}
-# ---------- functions -----
-source('analysis/06_ieeg/pearson_utils.R')
+source("analysis/06_ieeg/pearson_utils.R")
 ```
 
+## Input
 
-### Input
 ```{r}
-# ---------- paths ----------
 behavior_csv <- "data/06_ieeg/behavior_ieeg.csv"
-feature_PostcentralL_csv  <- "data/06_ieeg/feature/ieeg_PostcentralL.csv"   
-out_dir_fig  <- "figures/06_ieeg/PostcentralL"
-out_dir_csv  <- "results/06_ieeg/ieeg_PostcentralL_pearson.csv"
+feature_MTGR_csv <- "data/06_ieeg/feature/ieeg_MTGR.csv"
 
-# ---------- analysis params ----------
-condition_keep <- c(
-  "Voluntary_OutcomeOnsetReportSound",
-  "Involuntary_OutcomeOnsetReportSound"
-)
+out_fig <- "figures/06_ieeg/MTGR.pdf"
 
-feature_cols <- c(
-  "Alpha_bandPower",
-  "Gamma_bandPower",
-  "Beta_bandPower",
-  "Delta_bandPower",
-  "meanAmplitude"
-)
-
+dir.create(dirname(out_fig), recursive = TRUE, showWarnings = FALSE)
 ```
 
-### Pearson results
+## Load data
+
 ```{r}
-dat_list_PostcentralL <- read_behavior_feature(
-  behavior_csv = behavior_csv,
-  feature_csv = feature_PostcentralL_csv,
-  feature_encoding = "UTF-8"
+feature_df_MTGR <- read_csv(
+  feature_MTGR_csv,
+  locale = readr::locale(encoding = "UTF-8"),
+  show_col_types = FALSE
 )
 
-joined_long_PostcentralL <- make_long_joined_df(
-  be_df = dat_list_PostcentralL$be_df,
-  feature_df = dat_list_PostcentralL$feature_df,
-  feature_cols = feature_cols,
-  condition_keep = condition_keep
-)
-
-
-pearson_res_PostcentralL <- compute_pearson_results(
-  joined_long_df = joined_long_PostcentralL
-)
-
-pearson_res_PostcentralL %>% arrange(condition, feature) %>% head(20)
-```
-### Plot
-```{r}
-# ---------- plot style (optional) ----------
-label_cols <- c(
-  "chan61-chan62" = "#02c39a",
-  "chan64-chan65" = "#ff758f",
-  "chan78-chan79" = "#4a8fe7"
-)
-
-label_shapes <- c(
-  "chan61-chan62" = 16,
-  "chan64-chan65" = 17,
-  "chan78-chan79" = 15
-)
-
-cond_plot <- "Voluntary_OutcomeOnsetReportSound"
-
-# Alpha plot (no right marginal, no legend)
-alpha_plot_PostcentralL <- make_scatter_marginal_plot(
-  joined_long_df = joined_long_PostcentralL,
-  condition_pick = cond_plot,
-  feature_pick = "Alpha_bandPower",
-  label_cols = label_cols,
-  label_shapes = label_shapes,
-  show_y_title = TRUE,
-  show_legend = FALSE,
-  show_right_margin = FALSE
-)
-
-# Gamma plot (with right marginal, no y title)
-gamma_plot_PostcentralL <- make_scatter_marginal_plot(
-  joined_long_df = joined_long_PostcentralL,
-  condition_pick = cond_plot,
-  feature_pick = "Gamma_bandPower",
-  label_cols = label_cols,
-  label_shapes = label_shapes,
-  show_y_title = FALSE,
-  show_legend = FALSE,
-  show_right_margin = TRUE
+be_df <- read_csv(
+  behavior_csv,
+  locale = readr::locale(encoding = "UTF-8"),
+  show_col_types = FALSE
 )
 ```
 
+## Plot MTGR
 
-### Save
 ```{r}
-write_csv(pearson_res_PostcentralL, out_dir_csv)
-
-ggsave(
-    filename = file.path(out_dir_fig, "alpha_band_power.pdf"),
-    plot = alpha_plot_PostcentralL,
-    width = 9, height = 7, units = "in",
-    device = cairo_pdf,
-    family = "Arial"
-  )
-
-ggsave(
-    filename = file.path(out_dir_fig, "gamma_band_power.pdf"),
-    plot = gamma_plot_PostcentralL,
-    width = 9, height = 7, units = "in",
-    device = cairo_pdf,
-    family = "Arial"
-  )
-
-```
-
-
-## MTGR
-### Plot
-```{r}
-feature_df_MTGR <- read_csv("data/06_ieeg/feature/ieeg_MTGR.csv",locale = readr::locale(encoding = "UTF-8"),show_col_types = FALSE)
-be_df <- read_csv(behavior_csv,locale=readr::locale(encoding = "UTF-8"),show_col_types = FALSE)
-
 condition_pick <- "Voluntary_OutcomeOnsetReportSound"
 
 map_df <- tibble::tibble(
@@ -148,37 +59,48 @@ map_df <- tibble::tibble(
   label   = c("chan81-chan82", "chan10-chan11")
 )
 
-# Colors must be named by the final x_label levels.
-# Easiest: build once, then name accordingly:
-x_lab_map <- build_itpc_xlabels(feature_df_MTGR, condition_pick, map_df)
-x_levels <- unname(x_lab_map[c("4","2")])
+fill_vals <- c(
+  "10-11" = "#02c39a",
+  "81-82" = "#ff758f"
+)
 
-fill_vals <- c("#02c39a", "#ff758f")
-names(fill_vals) <- x_levels
+shape_vals <- c(
+  "10-11" = 21,
+  "81-82" = 24
+)
 
 p_MTGR <- plot_half_violin_subjects(
   behavior_df = be_df,
   feature_df  = feature_df_MTGR,
   condition_pick = condition_pick,
   map_df = map_df,
-  subjects_order = c("4","2"),
+  subjects_order = c("4", "2"),
   fill_vals = fill_vals,
-  itpc_cols = c(Delta = "Delta_bandITPC", Theta = "Theta_bandITPC")
+  point_shapes = shape_vals,
+  y_limits = c(-200, 600),
+  y_breaks = c(-200, 0, 200, 400, 600),
+  point_size = 2.8,
+  point_alpha = 0.72,
+  point_nudge = -0.12,
+  summary_nudge = 0.13
 )
 
-print(p_MTGR)
+p_MTGR
 ```
 
-### Save
+## Save
+
 ```{r}
 ggsave(
-    filename = "figures/06_ieeg/MTGR.pdf",
-    plot = p_MTGR,
-    width = 9, height = 7, units = "in",
-    device = cairo_pdf,
-    family = "Arial",
-    bg = "white"
-  )
+  filename = out_fig,
+  plot = p_MTGR,
+  width = 9,
+  height = 7,
+  units = "in",
+  device = cairo_pdf,
+  family = "Arial",
+  bg = "white"
+)
+
+cat("Saved:\n", out_fig, "\n")
 ```
-
-
