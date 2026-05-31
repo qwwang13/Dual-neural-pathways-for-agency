@@ -1,5 +1,8 @@
-test,n,t_stat,t_p,w_stat,w_p
-Action: Voluntary vs 0,19,1.7263519962946565,0.10140707626930595,137,0.09490936347110207
-Action: Involuntary vs 0,19,0.48350262820229367,0.6345681825456272,109,0.5869442919769576
-Outcome: Voluntary vs 0,19,-4.923576075152252,1.0957119129415909e-4,3,2.3126651526045176e-4
-Outcome: Involuntary vs 0,19,-4.572553954150092,2.360796517026002e-4,5,3.161731447966033e-4
+analysis,test,n,alternative,w_stat,w_p,w_p_print
+Full sample,Action: Voluntary vs 0,19,greater,137,0.047756195068359375,0.048
+Full sample,Action: Involuntary vs 0,19,greater,109,0.2974433898925781,0.297
+Full sample,Outcome: Voluntary vs 0,19,less,187,9.5367431640625e-6,< 0.001
+Full sample,Outcome: Involuntary vs 0,19,less,185,1.9073486328125e-5,< 0.001
+After outlier removal,Action: Voluntary vs 0,18,greater,118,0.08367538452148439,0.084
+After outlier removal,Outcome: Voluntary vs 0,18,less,168,1.9073486328125007e-5,< 0.001
+After outlier removal,Outcome: Involuntary vs 0,18,less,166,3.8146972656250014e-5,< 0.001

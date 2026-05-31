@@ -84,27 +84,71 @@ save_plot_pdf(
 )
 ```
 
+
 ## Condition comparisons
 
 ```{r}
-tests_one_sample <- bind_rows(
-  one_sample_tests(
+tests_one_sample_full <- bind_rows(
+  one_sample_wilcox(
     perceptual_shift_action_outcome$va_ba,
-    "Action: Voluntary vs 0"
+    "Action: Voluntary vs 0",
+    alternative = "greater"
   ),
-  one_sample_tests(
+  one_sample_wilcox(
     perceptual_shift_action_outcome$ia_bi,
-    "Action: Involuntary vs 0"
+    "Action: Involuntary vs 0",
+    alternative = "greater"
   ),
-  one_sample_tests(
+  one_sample_wilcox(
     perceptual_shift_action_outcome$vs_bs,
-    "Outcome: Voluntary vs 0"
+    "Outcome: Voluntary vs 0",
+    alternative = "less"
   ),
-  one_sample_tests(
+  one_sample_wilcox(
     perceptual_shift_action_outcome$is_bs,
-    "Outcome: Involuntary vs 0"
+    "Outcome: Involuntary vs 0",
+    alternative = "less"
   )
-)
+) %>%
+  mutate(analysis = "Full sample")
+
+outlier_id <- flag_outliers_2sd(perceptual_shift_action_outcome$va_ba)
+
+perceptual_shift_action_outcome_no_outlier <- perceptual_shift_action_outcome %>%
+  filter(!outlier_id)
+
+tests_one_sample_no_outlier <- bind_rows(
+  one_sample_wilcox(
+    perceptual_shift_action_outcome_no_outlier$va_ba,
+    "Action: Voluntary vs 0",
+    alternative = "greater"
+  ),
+  one_sample_wilcox(
+    perceptual_shift_action_outcome_no_outlier$vs_bs,
+    "Outcome: Voluntary vs 0",
+    alternative = "less"
+  ),
+  one_sample_wilcox(
+    perceptual_shift_action_outcome_no_outlier$is_bs,
+    "Outcome: Involuntary vs 0",
+    alternative = "less"
+  )
+) %>%
+  mutate(analysis = "After outlier removal")
+
+tests_one_sample <- bind_rows(
+  tests_one_sample_full,
+  tests_one_sample_no_outlier
+) %>%
+  select(
+    analysis,
+    test,
+    n,
+    alternative,
+    w_stat,
+    w_p,
+    w_p_print
+  )
 
 write_csv(
   tests_one_sample,
@@ -112,4 +156,5 @@ write_csv(
 )
 
 tests_one_sample
+
 ```
