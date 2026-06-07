@@ -56,17 +56,17 @@ condition_pick <- "Voluntary_OutcomeOnsetReportSound"
 
 map_df <- tibble::tibble(
   subject = c("2", "4"),
-  label   = c("chan81-chan82", "chan10-chan11")
+  label   = c("chan83-chan84", "chan10-chan11")
 )
 
 fill_vals <- c(
   "10-11" = "#02c39a",
-  "81-82" = "#ff758f"
+  "83-84" = "#ff758f"
 )
 
 shape_vals <- c(
   "10-11" = 21,
-  "81-82" = 24
+  "83-84" = 24
 )
 
 p_MTGR <- plot_half_violin_subjects(
@@ -77,12 +77,15 @@ p_MTGR <- plot_half_violin_subjects(
   subjects_order = c("4", "2"),
   fill_vals = fill_vals,
   point_shapes = shape_vals,
+  itpc_cols = c(Delta = "Delta_bandITPC", Theta = "Theta_bandITPC"),
   y_limits = c(-200, 600),
   y_breaks = c(-200, 0, 200, 400, 600),
   point_size = 2.8,
   point_alpha = 0.72,
   point_nudge = -0.12,
-  summary_nudge = 0.13
+  jitter_width = 0.15,
+  summary_nudge = 0.13,
+  range_cap_width = 0.18
 )
 
 p_MTGR

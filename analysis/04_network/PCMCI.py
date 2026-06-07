@@ -42,6 +42,8 @@ def run_pcmci_gpdc(
     seed: int = 0,
     save_fig_path: Optional[str | Path] = None,
     show_fig: bool = True,
+    verbosity: int = 0,
+    print_significant: bool = False,
 ) -> Dict[str, Any]:
     print(f"\n[{label}] tau_max={tau_max}")
 
@@ -52,14 +54,20 @@ def run_pcmci_gpdc(
     else:
         raise ValueError("significance must be 'analytic' or 'shuffle_test'")
 
-    pcmci = PCMCI(dataframe=dataframe, cond_ind_test=cond_ind_test, verbosity=1)
-    results = pcmci.run_pcmci(tau_min=1, tau_max=tau_max, pc_alpha=pc_alpha)
-
-    pcmci.print_significant_links(
-        p_matrix=results["p_matrix"],
-        val_matrix=results["val_matrix"],
+    pcmci = PCMCI(dataframe=dataframe, cond_ind_test=cond_ind_test, verbosity=verbosity)
+    results = pcmci.run_pcmci(
+        tau_min=1,
+        tau_max=tau_max,
+        pc_alpha=pc_alpha,
         alpha_level=alpha_level,
     )
+
+    if print_significant:
+        pcmci.print_significant_links(
+            p_matrix=results["p_matrix"],
+            val_matrix=results["val_matrix"],
+            alpha_level=alpha_level,
+        )
 
     two_nodes = len(regions) == 2
     if two_nodes:

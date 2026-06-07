@@ -5,6 +5,35 @@ from pathlib import Path
 from mne.time_frequency import tfr_array_morlet
 
 
+def _filter_to_behavior_trials(df, behavior_csv, encoding):
+    if behavior_csv is None:
+        return df
+
+    key_cols = ["subject", "condition", "trial"]
+    beh = pd.read_csv(behavior_csv, encoding=encoding)
+    missing = set(key_cols) - set(beh.columns)
+    if missing:
+        raise ValueError(f"behavior_csv missing columns: {sorted(missing)}")
+
+    if "behavior_value" in beh.columns:
+        beh = beh[beh["behavior_value"].notna()].copy()
+
+    key_df = beh[key_cols].drop_duplicates().copy()
+    df2 = df.copy()
+
+    tmp_cols = [f"__key_{col}" for col in key_cols]
+    for col, tmp in zip(key_cols, tmp_cols):
+        key_df[tmp] = key_df[col].astype(str)
+        df2[tmp] = df2[col].astype(str)
+
+    filtered = df2.merge(key_df[tmp_cols].drop_duplicates(), on=tmp_cols, how="inner")
+    filtered = filtered.drop(columns=tmp_cols)
+    if filtered.empty:
+        raise ValueError("No neural trials match behavior_csv after filtering")
+
+    return filtered
+
+
 def compute_trial_features(
     csv_path: str | Path,
     time_window: tuple,
@@ -12,9 +41,11 @@ def compute_trial_features(
     freqs=None,
     bands=None,
     encoding: str = "utf-8",
+    behavior_csv: str | Path | None = None,
+    exclude_subjects=None,
 ):
     if freqs is None:
-        freqs = np.arange(1, 30, 1)
+        freqs = np.arange(1, 31, 1)
     freqs = np.asarray(freqs, dtype=float)
     n_cycles = freqs / 2.0
 
@@ -37,6 +68,12 @@ def compute_trial_features(
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing columns: {sorted(missing)}")
+
+    if exclude_subjects:
+        exclude_set = {str(x) for x in exclude_subjects}
+        df = df[~df["subject"].astype(str).isin(exclude_set)].copy()
+
+    df = _filter_to_behavior_trials(df, behavior_csv, encoding)
 
     trial_power_rows = []
     itpc_rows = []
@@ -76,7 +113,7 @@ def compute_trial_features(
         itpc = np.abs(phase.mean(axis=0))
 
         for band_name, (f_lo, f_hi) in bands.items():
-            fmask = (freqs >= f_lo) & (freqs <= f_hi)
+            fmask = (freqs >= f_lo) & (freqs < f_hi)
             if not np.any(fmask):
                 continue
 
@@ -131,6 +168,8 @@ def export_trial_features(
     freqs=None,
     bands=None,
     encoding: str = "utf-8",
+    behavior_csv: str | Path | None = None,
+    exclude_subjects=None,
 ):
     csv_path = Path(csv_path)
     out_dir = Path(out_dir)
@@ -143,6 +182,8 @@ def export_trial_features(
         freqs=freqs,
         bands=bands,
         encoding=encoding,
+        behavior_csv=behavior_csv,
+        exclude_subjects=exclude_subjects,
     )
 
     out_csv = out_dir / csv_path.name

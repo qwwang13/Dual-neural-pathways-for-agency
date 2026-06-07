@@ -33,6 +33,15 @@ add_signif <- function(p) {
       t_value = .data[["t value"]],
       p_value = .data[["Pr(>|t|)"]],
       signif = add_signif(.data[["Pr(>|t|)"]])
+    ) %>%
+    mutate(
+      ci_crit = qt(0.975, df),
+      conf_low = estimate - ci_crit * std_error,
+      conf_high = estimate + ci_crit * std_error
+    ) %>%
+    select(
+      condition, term, estimate, std_error, df, t_value, p_value,
+      conf_low, conf_high, signif
     )
 }
 
@@ -90,13 +99,13 @@ run_lmm_split <- function(
   fixed_table <- bind_rows(lapply(names(models), function(cond) {
     .tidy_fixef(models[[cond]], cond)
   })) %>%
-    select(condition, term, estimate, std_error, df, t_value, p_value, signif)
+    select(condition, term, estimate, std_error, df, t_value, p_value, conf_low, conf_high, signif)
   
   fixed_table_wide <- fixed_table %>%
-    select(condition, term, estimate, std_error, df, t_value, p_value, signif) %>%
+    select(condition, term, estimate, std_error, df, t_value, p_value, conf_low, conf_high, signif) %>%
     pivot_wider(
       names_from = condition,
-      values_from = c(estimate, std_error, df, t_value, p_value, signif),
+      values_from = c(estimate, std_error, df, t_value, p_value, conf_low, conf_high, signif),
       names_sep = "_"
     )
   

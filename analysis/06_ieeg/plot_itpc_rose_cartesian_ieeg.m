@@ -147,14 +147,17 @@ for j = 1:numel(bandOrder)
         cfg.barAngleOffsetFrac, ...
         cfg.barWidthFrac);
 
+    zUnit1 = subject_label_phase_vectors(A, idx1);
+    zUnit2 = subject_label_phase_vectors(A, idx2);
+
+    mu1 = group_mean_direction(zUnit1, wrap2pi);
+    mu2 = group_mean_direction(zUnit2, wrap2pi);
+
     itpc1 = get_itpc_value(I, c1, b);
     itpc2 = get_itpc_value(I, c2, b);
 
-    muSub1 = subject_mean_angles(A, idx1, wrap2pi);
-    muSub2 = subject_mean_angles(A, idx2, wrap2pi);
-
-    mu1 = mean_angle_for_condition(muSub1, th1, wrap2pi);
-    mu2 = mean_angle_for_condition(muSub2, th2, wrap2pi);
+    muSub1 = phase_vector_angles(zUnit1, wrap2pi);
+    muSub2 = phase_vector_angles(zUnit2, wrap2pi);
 
     if isfinite(itpc1) && itpc1 > 0
         rArrow1 = cfg.arrowMaxFrac * rlimMax * itpc1 / cfg.globalMaxITPC;
@@ -442,21 +445,27 @@ patch(ax, [tip(1), p1(1), p2(1)], ...
 end
 
 % =========================================================================
-% Compute subject-level mean angles
+% Compute subject-label phase vectors
 % =========================================================================
-function muSub = subject_mean_angles(A, idx, wrap2pi)
+function zUnit = subject_label_phase_vectors(A, idx)
 
-muSub = [];
+zUnit = [];
 
 if ~any(idx)
     return;
 end
 
-subIDs = unique(A.subject(idx));
-muSub = nan(numel(subIDs), 1);
+if ismember("label", string(A.Properties.VariableNames))
+    groupKeys = unique(A(idx, ["subject", "label"]), "rows");
+else
+    groupKeys = unique(A(idx, "subject"), "rows");
+end
 
-for s = 1:numel(subIDs)
-    sid = subIDs(s);
+zUnit = complex(nan(height(groupKeys), 1), nan(height(groupKeys), 1));
+
+for s = 1:height(groupKeys)
+
+    sid = groupKeys.subject(s);
 
     if isnumeric(A.subject)
         subIdx = A.subject == sid;
@@ -464,33 +473,63 @@ for s = 1:numel(subIDs)
         subIdx = string(A.subject) == string(sid);
     end
 
-    th_s = A.angle_rad(idx & subIdx);
+    if ismember("label", string(A.Properties.VariableNames))
+        lab = groupKeys.label(s);
+
+        if isnumeric(A.label)
+            labelIdx = A.label == lab;
+        else
+            labelIdx = string(A.label) == string(lab);
+        end
+    else
+        labelIdx = true(height(A), 1);
+    end
+
+    th_s = A.angle_rad(idx & subIdx & labelIdx);
 
     if isempty(th_s)
         continue;
     end
 
-    R_s = mean(exp(1i * th_s));
-    muSub(s) = wrap2pi(angle(R_s));
+    zUnit(s) = mean(exp(1i * th_s));
 end
 
-muSub = muSub(isfinite(muSub));
+keep = isfinite(real(zUnit)) & isfinite(imag(zUnit));
+zUnit = zUnit(keep);
 
 end
 
 % =========================================================================
-% Compute condition-level mean angle
+% Compute subject-label phase vector angles
 % =========================================================================
-function mu = mean_angle_for_condition(muSub, thAll, wrap2pi)
+function muSub = phase_vector_angles(zUnit, wrap2pi)
+
+muSub = [];
+
+if isempty(zUnit)
+    return;
+end
+
+keep = isfinite(real(zUnit)) & isfinite(imag(zUnit)) & abs(zUnit) > eps;
+muSub = wrap2pi(angle(zUnit(keep)));
+
+end
+
+% =========================================================================
+% Compute condition-level direction
+% =========================================================================
+function mu = group_mean_direction(zUnit, wrap2pi)
 
 mu = 0;
 
-if ~isempty(muSub)
-    Rg = mean(exp(1i * muSub));
-    mu = wrap2pi(angle(Rg));
-elseif ~isempty(thAll)
-    Rp = mean(exp(1i * thAll));
-    mu = wrap2pi(angle(Rp));
+if isempty(zUnit)
+    return;
+end
+
+zGroup = mean(zUnit);
+
+if isfinite(abs(zGroup)) && abs(zGroup) > eps
+    mu = wrap2pi(angle(zGroup));
 end
 
 end
@@ -502,8 +541,15 @@ function itpc = get_itpc_value(I, cond, band)
 
 row = I((I.condition == cond) & (I.band == band), :);
 
-if ~isempty(row)
-    itpc = row.itpc_mean(1);
+if ~isempty(row) && ismember("itpc_mean", string(row.Properties.VariableNames))
+    vals = row.itpc_mean;
+    vals = vals(isfinite(vals));
+
+    if isempty(vals)
+        itpc = NaN;
+    else
+        itpc = mean(vals);
+    end
 else
     itpc = NaN;
 end

@@ -147,14 +147,17 @@ for j = 1:numel(bandOrder)
         cfg.barAngleOffsetFrac, ...
         cfg.barWidthFrac);
 
+    zSub1 = subject_itpc_vectors(A, idx1);
+    zSub2 = subject_itpc_vectors(A, idx2);
+
+    mu1 = group_mean_direction(zSub1, wrap2pi);
+    mu2 = group_mean_direction(zSub2, wrap2pi);
+
     itpc1 = get_itpc_value(I, c1, b);
     itpc2 = get_itpc_value(I, c2, b);
 
-    muSub1 = subject_mean_angles(A, idx1, wrap2pi);
-    muSub2 = subject_mean_angles(A, idx2, wrap2pi);
-
-    mu1 = mean_angle_for_condition(muSub1, th1, wrap2pi);
-    mu2 = mean_angle_for_condition(muSub2, th2, wrap2pi);
+    muSub1 = subject_vector_angles(zSub1, wrap2pi);
+    muSub2 = subject_vector_angles(zSub2, wrap2pi);
 
     if isfinite(itpc1) && itpc1 > 0
         rArrow1 = cfg.arrowMaxFrac * rlimMax * itpc1 / cfg.globalMaxITPC;
@@ -440,18 +443,18 @@ patch(ax, [tip(1), p1(1), p2(1)], ...
 end
 
 % =========================================================================
-% Compute subject-level mean angles
+% Compute subject-level ITPC complex vectors
 % =========================================================================
-function muSub = subject_mean_angles(A, idx, wrap2pi)
+function zSub = subject_itpc_vectors(A, idx)
 
-muSub = [];
+zSub = [];
 
 if ~any(idx)
     return;
 end
 
 subIDs = unique(A.subject(idx));
-muSub = nan(numel(subIDs), 1);
+zSub = complex(nan(numel(subIDs), 1), nan(numel(subIDs), 1));
 
 for s = 1:numel(subIDs)
     sid = subIDs(s);
@@ -468,27 +471,45 @@ for s = 1:numel(subIDs)
         continue;
     end
 
-    R_s = mean(exp(1i * th_s));
-    muSub(s) = wrap2pi(angle(R_s));
+    zSub(s) = mean(exp(1i * th_s));
 end
 
-muSub = muSub(isfinite(muSub));
+keep = isfinite(real(zSub)) & isfinite(imag(zSub));
+zSub = zSub(keep);
 
 end
 
 % =========================================================================
-% Compute condition-level mean angle
+% Compute subject-level ITPC vector angles
 % =========================================================================
-function mu = mean_angle_for_condition(muSub, thAll, wrap2pi)
+function muSub = subject_vector_angles(zSub, wrap2pi)
+
+muSub = [];
+
+if isempty(zSub)
+    return;
+end
+
+keep = isfinite(real(zSub)) & isfinite(imag(zSub)) & abs(zSub) > eps;
+muSub = wrap2pi(angle(zSub(keep)));
+
+end
+
+% =========================================================================
+% Compute condition-level direction
+% =========================================================================
+function mu = group_mean_direction(zSub, wrap2pi)
 
 mu = 0;
 
-if ~isempty(muSub)
-    Rg = mean(exp(1i * muSub));
-    mu = wrap2pi(angle(Rg));
-elseif ~isempty(thAll)
-    Rp = mean(exp(1i * thAll));
-    mu = wrap2pi(angle(Rp));
+if isempty(zSub)
+    return;
+end
+
+zGroup = mean(zSub);
+
+if isfinite(abs(zGroup)) && abs(zGroup) > eps
+    mu = wrap2pi(angle(zGroup));
 end
 
 end
@@ -500,7 +521,7 @@ function itpc = get_itpc_value(I, cond, band)
 
 row = I((I.condition == cond) & (I.band == band), :);
 
-if ~isempty(row)
+if ~isempty(row) && ismember("itpc_mean", string(row.Properties.VariableNames))
     itpc = row.itpc_mean(1);
 else
     itpc = NaN;

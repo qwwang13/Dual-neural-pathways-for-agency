@@ -63,6 +63,9 @@ stat_match <- function(x_clean, stat) {
   if (stat == "p.value") {
     return(str_detect(x_clean, "pvalue|pval|^p$|^pr"))
   }
+  if (stat == "df") {
+    return(str_detect(x_clean, "^df|dof|degreesfreedom"))
+  }
   if (stat == "conf.low") {
     return(str_detect(x_clean, "conflow|cilow|lower|lowerci|lwr"))
   }
@@ -116,6 +119,7 @@ standardize_long_table <- function(tab, roi, conditions, cond_labels) {
   
   estimate_col <- find_first_col(nms, c("estimate", "beta", "coef", "coefficient"))
   se_col       <- find_first_col(nms, c("std.error", "stderr", "standarderror", "se"))
+  df_col       <- find_first_col(nms, c("df", "dof", "degrees.freedom", "degreesfreedom"))
   p_col        <- find_first_col(nms, c("p.value", "pvalue", "pval", "p", "Pr(>|t|)"))
   low_col      <- find_first_col(nms, c("conf.low", "conflow", "ci.low", "cilow", "lower", "lowerci"))
   high_col     <- find_first_col(nms, c("conf.high", "confhigh", "ci.high", "cihigh", "upper", "upperci"))
@@ -126,6 +130,7 @@ standardize_long_table <- function(tab, roi, conditions, cond_labels) {
     term = as.character(tab[[term_col]]),
     estimate = if (!is.na(estimate_col)) suppressWarnings(as.numeric(tab[[estimate_col]])) else NA_real_,
     std.error = if (!is.na(se_col)) suppressWarnings(as.numeric(tab[[se_col]])) else NA_real_,
+    df = if (!is.na(df_col)) suppressWarnings(as.numeric(tab[[df_col]])) else NA_real_,
     p.value = if (!is.na(p_col)) suppressWarnings(as.numeric(tab[[p_col]])) else NA_real_,
     conf.low = if (!is.na(low_col)) suppressWarnings(as.numeric(tab[[low_col]])) else NA_real_,
     conf.high = if (!is.na(high_col)) suppressWarnings(as.numeric(tab[[high_col]])) else NA_real_
@@ -146,7 +151,7 @@ standardize_long_table <- function(tab, roi, conditions, cond_labels) {
       })
     ) %>%
     filter(condition %in% conditions) %>%
-    select(ROI, condition, term, estimate, std.error, p.value, conf.low, conf.high)
+    select(ROI, condition, term, estimate, std.error, df, p.value, conf.low, conf.high)
 }
 
 standardize_wide_table <- function(tab, roi, conditions, cond_labels) {
@@ -169,6 +174,7 @@ standardize_wide_table <- function(tab, roi, conditions, cond_labels) {
     
     est_col  <- find_stat_cond_col(nms, "estimate",  cond, cond_label)
     se_col   <- find_stat_cond_col(nms, "std.error", cond, cond_label)
+    df_col   <- find_stat_cond_col(nms, "df",        cond, cond_label)
     p_col    <- find_stat_cond_col(nms, "p.value",   cond, cond_label)
     low_col  <- find_stat_cond_col(nms, "conf.low",  cond, cond_label)
     high_col <- find_stat_cond_col(nms, "conf.high", cond, cond_label)
@@ -179,6 +185,7 @@ standardize_wide_table <- function(tab, roi, conditions, cond_labels) {
       term = as.character(tab[[term_col]]),
       estimate = if (!is.na(est_col)) suppressWarnings(as.numeric(tab[[est_col]])) else NA_real_,
       std.error = if (!is.na(se_col)) suppressWarnings(as.numeric(tab[[se_col]])) else NA_real_,
+      df = if (!is.na(df_col)) suppressWarnings(as.numeric(tab[[df_col]])) else NA_real_,
       p.value = if (!is.na(p_col)) suppressWarnings(as.numeric(tab[[p_col]])) else NA_real_,
       conf.low = if (!is.na(low_col)) suppressWarnings(as.numeric(tab[[low_col]])) else NA_real_,
       conf.high = if (!is.na(high_col)) suppressWarnings(as.numeric(tab[[high_col]])) else NA_real_
@@ -213,17 +220,23 @@ extract_fixed_long <- function(split_res, roi, conditions, cond_labels) {
   
   out %>%
     mutate(
+      ci_crit = if_else(
+        !is.na(df) & df > 0,
+        qt(0.975, df),
+        qnorm(0.975)
+      ),
       conf.low = if_else(
         is.na(conf.low) & !is.na(estimate) & !is.na(std.error),
-        estimate - 1.96 * std.error,
+        estimate - ci_crit * std.error,
         conf.low
       ),
       conf.high = if_else(
         is.na(conf.high) & !is.na(estimate) & !is.na(std.error),
-        estimate + 1.96 * std.error,
+        estimate + ci_crit * std.error,
         conf.high
       )
-    )
+    ) %>%
+    select(-ci_crit)
 }
 
 match_itpc_term <- function(term_vec, terms_select) {

@@ -233,7 +233,7 @@ globalMaxProb = max(globalMaxProb, eps);
 end
 
 % =========================================================================
-% Get the global maximum ITPC value
+% Get the global maximum ITPC value from exported TF-style ITPC tables
 % =========================================================================
 function globalMaxITPC = get_global_max_itpc_mixed(regionStems, baseDir, bandOrder)
 
@@ -251,6 +251,10 @@ for rr = 1:numel(regionStems)
     I.condition = string(I.condition);
     I.band      = string(I.band);
 
+    if ~ismember("itpc_mean", string(I.Properties.VariableNames))
+        error("itpc_mean.csv must contain an itpc_mean column.");
+    end
+
     conds = unique(I.condition);
 
     for jj = 1:numel(bandOrder)
@@ -261,7 +265,7 @@ for rr = 1:numel(regionStems)
 
             row = I((I.condition == c) & (I.band == b), :);
 
-            if ~isempty(row) && ismember("itpc_mean", string(row.Properties.VariableNames))
+            if ~isempty(row)
                 val = row.itpc_mean(1);
                 if isfinite(val)
                     globalMaxITPC = max(globalMaxITPC, val);

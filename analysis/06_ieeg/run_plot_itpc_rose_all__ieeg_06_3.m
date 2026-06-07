@@ -243,7 +243,14 @@ for rr = 1:numel(regionStems)
             row = I((I.condition == c) & (I.band == b), :);
 
             if ~isempty(row) && ismember("itpc_mean", string(row.Properties.VariableNames))
-                val = row.itpc_mean(1);
+                vals = row.itpc_mean;
+                vals = vals(isfinite(vals));
+
+                if isempty(vals)
+                    continue;
+                end
+
+                val = mean(vals);
                 if isfinite(val)
                     globalMaxITPC = max(globalMaxITPC, val);
                 end

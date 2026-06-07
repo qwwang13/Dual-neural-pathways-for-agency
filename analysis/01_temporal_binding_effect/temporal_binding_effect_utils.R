@@ -95,16 +95,51 @@ plot_halfviolin <- function(df_long, title,
 }
 
 # ---------- stats ----------
-one_sample_tests <- function(x, label, mu = 0) {
-  tt <- t.test(x, mu = mu)
-  wx <- wilcox.test(x, mu = mu, exact = FALSE)
+format_p <- function(p, digits = 3) {
+  ifelse(p < 0.001, "< 0.001", sprintf(paste0("%.", digits, "f"), p))
+}
+
+one_sample_wilcox <- function(x, label, mu = 0,
+                              alternative = c("greater", "less", "two.sided"),
+                              exact = TRUE) {
+  alternative <- match.arg(alternative)
   
-  tibble(
-    test = label,
-    n = length(x),
-    t_stat = unname(tt$statistic),
-    t_p = tt$p.value,
-    w_stat = unname(wx$statistic),
-    w_p = wx$p.value
+  x <- x[!is.na(x)]
+  d <- x - mu
+  d <- d[d != 0]
+  
+  n_eff <- length(d)
+  
+  wx <- wilcox.test(
+    d,
+    mu = 0,
+    alternative = alternative,
+    exact = exact,
+    correct = FALSE
   )
+  
+  W_plus <- as.numeric(wx$statistic)
+  total_rank <- sum(rank(abs(d)))
+  
+  # Match the manuscript convention: for one-sided "less" tests, report the
+  # rank sum in the hypothesized negative-shift direction rather than R's W+.
+  W_report <- dplyr::case_when(
+    alternative == "greater" ~ W_plus,
+    alternative == "less" ~ total_rank - W_plus,
+    TRUE ~ W_plus
+  )
+  
+  tibble::tibble(
+    test = label,
+    n = n_eff,
+    alternative = alternative,
+    w_stat = W_report,
+    w_p = wx$p.value,
+    w_p_print = format_p(wx$p.value)
+  )
+}
+
+flag_outliers_2sd <- function(x) {
+  z <- abs(x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+  z > 2
 }

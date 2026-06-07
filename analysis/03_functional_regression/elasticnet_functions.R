@@ -183,9 +183,6 @@ run_elasticnet_grid <- function(feature_df,
 }
 
 # Filter results:
-# For each (region,time_window), keep the "best" model subject to consecutive constraint.
-# "Best" = sparsest (min n_selected), tie-break by highest r2.
-# Output is expanded per selected p_number with time bounds.
 filter_elasticnet_by_consecutive <- function(all_models_df,
                                              conti_p_list,
                                              time_lower_ms = 0,
@@ -214,11 +211,6 @@ filter_elasticnet_by_consecutive <- function(all_models_df,
       filter(ok)
     
     if (nrow(cand) == 0) return(tibble())
-    
-    # Choose best: sparsest (min n_selected), tie-break by max r2
-    # best <- cand %>%
-    #   arrange(n_selected, desc(r2)) %>%
-    #   slice(1)
     
     best <- cand %>% 
       arrange(n_selected)%>%

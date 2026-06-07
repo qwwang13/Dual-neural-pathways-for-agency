@@ -112,6 +112,7 @@ tests_one_sample_full <- bind_rows(
 ) %>%
   mutate(analysis = "Full sample")
 
+
 outlier_id <- flag_outliers_2sd(perceptual_shift_action_outcome$va_ba)
 
 perceptual_shift_action_outcome_no_outlier <- perceptual_shift_action_outcome %>%
