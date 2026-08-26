@@ -110,7 +110,7 @@ filtered_models <- filter_elasticnet_by_consecutive(
 filtered_models_final <- post_filter_sparse_and_overlap_run(
   filtered_models = filtered_models,
   time_windows = c(10, 20, 40),
-  max_window_ms = 240,
+  max_window_ms = 280,
   min_overlap_run_ms = 40,
   allowed_gap_bins = 2
 ) %>%
