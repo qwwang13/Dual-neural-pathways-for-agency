@@ -91,9 +91,9 @@ all_models <- run_elasticnet_grid(
 )
 
 conti_p_list <- list(
-  "AG-R"      = list("10" = 3, "20" = 3, "40" = 3),
-  "DLPFC-R"  = list("10" = 3, "20" = 3, "40" = 3),
-  "Insula-R" = list("10" = 3, "20" = 3, "40" = 3),
+  "AG-R"      = list("10" = 3, "20" = 2, "40" = 1),
+  "DLPFC-R"  = list("10" = 3, "20" = 2, "40" = 1),
+  "Insula-R" = list("10" = 3, "20" = 2, "40" = 1),
   "SMA-R"    = list("10" = 9, "20" = 4, "40" = 3),
   "PreSMA-R" = list("10" = 6, "20" = 5, "40" = 3),
   "PreSMA-L" = list("10" = 9, "20" = 5, "40" = 3)
@@ -110,7 +110,7 @@ filtered_models <- filter_elasticnet_by_consecutive(
 filtered_models_final <- post_filter_sparse_and_overlap_run(
   filtered_models = filtered_models,
   time_windows = c(10, 20, 40),
-  max_window_ms = 280,
+  max_window_ms = 1000,
   min_overlap_run_ms = 40,
   allowed_gap_bins = 2
 ) %>%

@@ -102,9 +102,9 @@ all_models <- run_elasticnet_grid(
 conti_p_list <- list(
   "Postcentral-L" = list("10" = 4, "20" = 4, "40" = 3),
   "MTG-R"         = list("10" = 7, "20" = 5, "40" = 5),
-  "Precuneus-R"   = list("10" = 5, "20" = 3, "40" = 4),
-  "Precentral-R"  = list("10" = 4, "20" = 3, "40" = 3),
-  "Postcentral-R" = list("10" = 5, "20" = 7, "40" = 6),
+  "Precuneus-R"   = list("10" = 5, "20" = 2, "40" = 4),
+  "Precentral-R"  = list("10" = 4, "20" = 3, "40" = 1),
+  "Postcentral-R" = list("10" = 5, "20" = 7, "40" = 5),
   "SPG-L"         = list("10" = 6, "20" = 9, "40" = 4)
 )
 
@@ -119,7 +119,7 @@ filtered_models <- filter_elasticnet_by_consecutive(
 filtered_models_final <- post_filter_sparse_and_overlap_run(
   filtered_models = filtered_models,
   time_windows = c(10, 20, 40),
-  max_window_ms = 280,
+  max_window_ms = 1000,
   min_overlap_run_ms = 40,
   allowed_gap_bins = 2
 ) %>%
