@@ -1,0 +1,93 @@
+---
+title: "Temporal binding effects"
+output: html_document
+---
+
+All 19 participants are included. Exact one-sided signed-rank tests use the specified directions. V reports the larger rank sum; both signed rank sums are saved.
+
+## Read data
+
+```{r setup, include=FALSE}
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+out <- out_dir("01_temporal_binding_effect"); fig <- out_dir("01_temporal_binding_effect", TRUE)
+d <- read_csv(file.path(data_root, "01_temporal_binding_effect/perceptual_shift_action_outcome.csv"), show_col_types=FALSE) %>% arrange(subject)
+check19(d$subject); stopifnot(nrow(d)==19, !anyDuplicated(d$subject))
+vars <- c("va_ba", "ia_bi", "vs_bs", "is_bs")
+stopifnot(all(is.finite(as.matrix(d[vars]))))
+```
+
+## Run statistical tests
+
+```{r statistical-tests, include=FALSE}
+delta <- d$vs_bs - d$is_bs
+normality <- map_dfr(c(vars, "outcome_voluntary_minus_involuntary"), function(v) {
+  x <- if(v %in% vars) d[[v]] else delta
+  z <- shapiro.test(x)
+  tibble(variable=v, n=length(x), W=unname(z$statistic), p=z$p.value)
+})
+signed_rank <- function(x, label, alternative) {
+  stopifnot(all(x!=0), !anyDuplicated(abs(x)))
+  z <- wilcox.test(x, mu=0, alternative=alternative, exact=TRUE, correct=FALSE)
+  tibble(comparison=label, n=length(x), mean=mean(x), median=median(x), sd=sd(x),
+         alternative=alternative, V=max(unname(z$statistic),sum(rank(abs(x)))-unname(z$statistic)),
+         W_positive=unname(z$statistic),W_negative=sum(rank(abs(x)))-unname(z$statistic),p=z$p.value)
+}
+against_zero <- map_dfr(vars, function(v) signed_rank(d[[v]], v,
+  if(v %in% c("va_ba","ia_bi")) "greater" else "less"))
+paired <- signed_rank(delta, "Outcome voluntary - involuntary", "less")
+write_csv(normality, file.path(out,"normality.csv"))
+write_csv(against_zero, file.path(out,"against_zero.csv"))
+write_csv(paired, file.path(out,"outcome_paired.csv"))
+```
+
+```{r}
+knitr::kable(normality, digits=4)
+```
+
+```{r}
+knitr::kable(against_zero, digits=4)
+```
+
+```{r}
+knitr::kable(paired, digits=4)
+```
+
+## Plot and save
+
+```{r plot-settings}
+font_size <- 6
+plot_width_cm <- 8.0
+plot_height_cm <- 6.4
+point_alpha <- .60
+fill_alpha <- .60
+point_size <- .65
+action_colors <- c("#1E90FF","#FF7518")
+outcome_colors <- c("#0BDA51","#FF69B4")
+action_fills <- c("#9FD0F2","#FFC980")
+outcome_fills <- c("#B4E39A","#F9D1DC")
+```
+
+```{r, echo=FALSE, fig.width=plot_width_cm/2.54, fig.height=plot_height_cm/2.54}
+source(file.path(project_root,"analysis/01_temporal_binding_effect/behavior_plot_utils.R"),local=TRUE,encoding="UTF-8")
+df_action <- to_long(d, c("va_ba","ia_bi"), c("va_ba","ia_bi"), c("Voluntary","Involuntary"))
+df_outcome <- to_long(d, c("vs_bs","is_bs"), c("vs_bs","is_bs"), c("Voluntary","Involuntary"))
+set.seed(20261030)
+p_action <- plot_halfviolin(df_action,title="Action",y_breaks=seq(-150,150,50),
+  palette=action_colors,fill_palette=action_fills,font_size=font_size,
+  point_alpha=point_alpha,fill_alpha=fill_alpha,point_size=point_size)
+p_outcome <- plot_halfviolin(df_outcome,title="Sound",y_breaks=seq(-400,0,50),
+  palette=outcome_colors,fill_palette=outcome_fills,font_size=font_size,
+  point_alpha=point_alpha,fill_alpha=fill_alpha,point_size=point_size)
+combined <- patchwork::wrap_plots(p_action,p_outcome,nrow=1)
+for(ext in "pdf") ggsave(file.path(fig,paste0("temporal_binding.",ext)),combined,
+  width=2*plot_width_cm,height=plot_height_cm,units="cm",device=if(ext=="pdf")cairo_pdf else"png",dpi=300,bg="white")
+p_action
+p_outcome
+```
+

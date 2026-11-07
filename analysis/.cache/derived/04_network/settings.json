@@ -1,0 +1,37 @@
+{
+  "networks": {
+    "action": {
+      "window_ms": [
+        100,
+        600
+      ],
+      "rois": [
+        "PreSMAL",
+        "PreSMAR",
+        "InsulaR"
+      ]
+    },
+    "outcome": {
+      "window_ms": [
+        100,
+        900
+      ],
+      "rois": [
+        "PrecentralR",
+        "PostcentralL",
+        "MTGR"
+      ]
+    }
+  },
+  "tau_min": 1,
+  "tau_max_values": [
+    7
+  ],
+  "bin_ms": 10,
+  "n_subjects": 19,
+  "pc_alpha": 0.05,
+  "alpha_level": 0.05,
+  "significance": "analytic",
+  "multiple_testing": "none",
+  "settings_key": "275037b443e4d9cab5ed29151d96304181d362e7549fa59d6a9bba3df2a3cf37"
+}

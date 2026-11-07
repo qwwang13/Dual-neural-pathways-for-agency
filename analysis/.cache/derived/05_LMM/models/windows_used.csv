@@ -1,0 +1,7 @@
+binding,region,primary_lower_ms,primary_upper_ms,primary_window,roi
+action,PreSMA-R,180,240,180–240,PreSMAR
+action,PreSMA-L,220,270,220–270,PreSMAL
+action,Insula-R,570,620,570–620,InsulaR
+outcome,Precentral-R,180,240,180–240,PrecentralR
+outcome,Postcentral-L,200,300,200–300,PostcentralL
+outcome,MTG-R,780,830,780–830,MTGR

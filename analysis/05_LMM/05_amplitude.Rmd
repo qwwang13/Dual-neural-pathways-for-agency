@@ -1,0 +1,249 @@
+---
+title: "Trial mean amplitude and participant means"
+output: html_document
+---
+
+Each condition pools all matched trials into 20 common equal-width bins. The smooth curve shows bin-width-scaled probability. The lower panel connects each participant’s condition means. The display uses a 48 mm canvas width and fonts of at least 6 pt.
+
+## Read data and set parameters
+
+```{r setup, include=FALSE}
+if(.Platform$OS.type=="windows") invisible(Sys.setlocale("LC_CTYPE","English_United States.utf8"))
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+library(patchwork)
+knitr::opts_chunk$set(echo=FALSE,message=FALSE)
+fig <- out_dir("05_LMM",TRUE)
+dir.create(fig,recursive=TRUE,showWarnings=FALSE)
+```
+
+```{r plot-settings}
+plot_width_cm <- 4.80
+compact_height_cm <- 134*2.54/72
+tall_height_cm <- 2*compact_height_cm
+font_size <- 6
+title_size <- 7
+n_bins <- 20
+density_adjust <- 1.1
+bar_line_width <- .16
+curve_line_width <- .30
+fill_alpha <- .678436
+point_alpha <- .90
+edge_alpha <- c(Voluntary=.90,Involuntary=.80)
+outcome_edge_alpha <- c(Voluntary=1.00,Involuntary=.90)
+line_colors <- c(Voluntary="#1E90FF",Involuntary="#FF7518")
+arrow_colors <- c(Voluntary="#006AB6",Involuntary="#FF542D")
+fill_colors <- c(Voluntary="#FFFFFF",Involuntary="#FFF0D8")
+outcome_line_colors <- c(Voluntary="#0BDA51",Involuntary="#FF69B4")
+outcome_arrow_colors <- c(Voluntary="#13AE67",Involuntary="#E65FC8")
+outcome_fill_colors <- c(Voluntary="#EEF9E8",Involuntary="#FDEBF1")
+display_rois <- manuscript_rois
+panel_height_cm <- 2.20
+square_panel_gap_cm <- .30
+three_panel_pair_line_width <- .16
+three_panel_pair_point_size <- .95
+zoom_mean_panel_height_cm <- .50
+zoom_mean_point_size <- .52
+zoom_mean_condition_offset <- .16
+dpi <- 300
+```
+
+```{r read-data}
+feature_windows <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE)
+model_windows <- read_csv(file.path(cache_root,"05_LMM/models/windows_used.csv"),show_col_types=FALSE)
+jobs <- feature_windows %>% filter(roi %in% display_rois) %>% arrange(match(roi,manuscript_rois))
+stopifnot(nrow(jobs)>0,!anyDuplicated(jobs[c("binding","roi")]))
+window_check <- full_join(
+  select(jobs,binding,roi,feature_lower=primary_lower_ms,feature_upper=primary_upper_ms),
+  model_windows %>% filter(roi %in% display_rois) %>%
+    select(binding,roi,model_lower=primary_lower_ms,model_upper=primary_upper_ms),
+  by=c("binding","roi"),relationship="one-to-one")
+stopifnot(nrow(window_check)==nrow(jobs),!anyNA(window_check),
+  all(window_check$feature_lower==window_check$model_lower),
+  all(window_check$feature_upper==window_check$model_upper))
+```
+
+## Plot mean amplitude
+
+```{r prepare-plots}
+make_roi_plots <- function(job) {
+  binding_name <- job$binding[[1]]
+  roi_name <- job$roi[[1]]
+  region_name <- job$region[[1]]
+  condition_codes <- if(binding_name=="action") c("va_a","ia_a") else c("vs_s","is_s")
+  if(binding_name=="outcome") {
+    line_colors <- outcome_line_colors
+    arrow_colors <- outcome_arrow_colors
+    fill_colors <- outcome_fill_colors
+    edge_alpha <- outcome_edge_alpha
+  }
+  w <- read_csv(file.path(cache_root,"05_LMM/models/windows_used.csv"),show_col_types=FALSE) %>%
+    filter(binding==binding_name,roi==roi_name)
+  used <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE) %>%
+    filter(binding==binding_name,roi==roi_name)
+  stopifnot(nrow(w)==1,nrow(used)==1,
+    w$primary_lower_ms==used$primary_lower_ms,w$primary_upper_ms==used$primary_upper_ms,
+    is.finite(n_bins),n_bins>=2,n_bins==as.integer(n_bins))
+  keys <- c("subject","condition","trial")
+  behavior <- read_csv(file.path(data_root,"05_LMM/behavior_single_trial.csv"),show_col_types=FALSE) %>%
+    filter(is.finite(behavior_value))
+  stopifnot(!anyDuplicated(behavior[keys]))
+  trials <- read_csv(file.path(cache_root,"05_LMM/features",job$file[[1]]),show_col_types=FALSE) %>%
+    inner_join(select(behavior,all_of(keys)),by=keys,relationship="one-to-one") %>%
+    filter(condition %in% condition_codes)
+  expected <- read_csv(file.path(cache_root,"05_LMM/models/matched_trial_counts.csv"),show_col_types=FALSE) %>%
+    filter(binding==binding_name,roi==roi_name) %>% select(subject,condition,n_model=n_trials)
+  checked <- full_join(count(trials,subject,condition,name="n_trials"),expected,
+    by=c("subject","condition"),relationship="one-to-one")
+  stopifnot(nrow(checked)==38,!anyNA(checked),all(checked$n_trials==checked$n_model),
+    !anyDuplicated(trials[keys]),all(is.finite(trials$meanAmplitude)))
+  for(cond in condition_codes) check19(trials$subject[trials$condition==cond])
+  trials <- trials %>% mutate(condition=factor(if_else(condition==condition_codes[1],"Voluntary","Involuntary"),
+    levels=c("Voluntary","Involuntary")))
+  means <- trials %>% group_by(subject,condition) %>% summarise(amplitude=mean(meanAmplitude),.groups="drop")
+  stopifnot(nrow(means)==38)
+  edges <- seq(floor(min(trials$meanAmplitude)*10)/10,
+    ceiling(max(trials$meanAmplitude)*10)/10,length.out=n_bins+1)
+  bin_width <- edges[2]-edges[1]
+  stopifnot(is.finite(bin_width),bin_width>0,length(edges)==n_bins+1)
+  trials$bin <- as.integer(cut(trials$meanAmplitude,breaks=edges,right=FALSE,include.lowest=TRUE))
+  stopifnot(!anyNA(trials$bin))
+  bars <- trials %>% count(condition,bin,name="n_trials") %>%
+    complete(condition,bin=seq_len(length(edges)-1),fill=list(n_trials=0)) %>%
+    group_by(condition) %>% mutate(probability=n_trials/sum(n_trials)) %>% ungroup() %>%
+    mutate(lower=edges[bin],upper=edges[bin+1]) %>% arrange(desc(probability))
+  stopifnot(all(abs((bars %>% group_by(condition) %>% summarise(s=sum(probability)))$s-1)<1e-10))
+  stopifnot(all(table(bars$condition)==n_bins))
+  bandwidth <- bw.nrd0(trials$meanAmplitude)*density_adjust
+  curves <- bind_rows(lapply(split(trials,trials$condition),function(g) {
+    z <- density(g$meanAmplitude,bw=bandwidth,from=min(edges)-4*bandwidth,to=max(edges)+4*bandwidth,n=4096)
+    cumulative <- c(0,cumsum(diff(z$x)*(head(z$y,-1)+tail(z$y,-1))/2))
+    cdf <- approxfun(z$x,cumulative,rule=2)
+    x <- seq(min(edges),max(edges),length.out=1024)
+    tibble(condition=g$condition[1],amplitude=x,
+      probability=pmax(0,cdf(x+bin_width/2)-cdf(x-bin_width/2)))
+  }))
+  curves <- curves %>% mutate(curve_color=paste0(condition,"_curve"))
+  amplitude_limits <- range(edges)
+  amplitude_breaks <- pretty(amplitude_limits,n=3)
+  style <- theme_classic(base_size=font_size,base_family="Arial") +
+    theme(axis.text=element_text(size=font_size,color="black"),axis.title=element_text(size=font_size),
+      axis.line=element_line(color="grey55",linewidth=.20),axis.ticks=element_line(linewidth=.15),
+      axis.ticks.length=grid::unit(.045,"cm"),plot.margin=margin(3,4,2,3),
+      legend.position="top",legend.title=element_blank(),legend.text=element_text(size=font_size),
+      legend.key.width=grid::unit(.25,"cm"),legend.key.height=grid::unit(.25,"cm"))
+  bar_fill_colors <- setNames(scales::alpha(unname(fill_colors),fill_alpha),names(fill_colors))
+  bar_edge_colors <- setNames(scales::alpha(unname(line_colors),unname(edge_alpha)),names(line_colors))
+  top <- ggplot() +
+    geom_vline(xintercept=0,linetype="dashed",linewidth=.15,color="#B5B5B5") +
+    geom_rect(data=bars,aes(xmin=lower,xmax=upper,ymin=0,ymax=probability,color=condition,fill=condition),
+      linewidth=bar_line_width) +
+    geom_line(data=curves,aes(amplitude,probability,color=curve_color),linewidth=curve_line_width,show.legend=FALSE) +
+    scale_color_manual(values=c(bar_edge_colors,setNames(arrow_colors,paste0(names(arrow_colors),"_curve")))) +
+    scale_fill_manual(values=bar_fill_colors) +
+    guides(color="none",fill=guide_legend(override.aes=list(color=unname(line_colors)))) +
+    scale_x_continuous(limits=amplitude_limits,breaks=amplitude_breaks,expand=expansion(mult=.01)) +
+    scale_y_continuous(expand=expansion(mult=c(0,.07))) +
+    labs(x="Trial mean amplitude (z-score)",y="Probability") + style
+  mean_zoom_limit <- ceiling(max(abs(means$amplitude))*1.10/.05)*.05
+  zoom_means <- means %>% mutate(row=if_else(condition=="Voluntary",
+    zoom_mean_condition_offset,-zoom_mean_condition_offset))
+  bottom_mean_zoom <- ggplot(zoom_means,aes(amplitude,row,fill=condition)) +
+    geom_vline(xintercept=0,linetype="dashed",linewidth=.12,color="#B5B5B5") +
+    geom_point(shape=21,color="white",size=zoom_mean_point_size,stroke=.055,alpha=point_alpha) +
+    scale_fill_manual(values=line_colors) +
+    scale_x_continuous(limits=c(-mean_zoom_limit,mean_zoom_limit),
+      breaks=pretty(c(-mean_zoom_limit,mean_zoom_limit),n=3),expand=expansion(mult=.01)) +
+    scale_y_continuous(limits=c(-.4,.4),breaks=NULL,expand=expansion(mult=0)) +
+    labs(x="Subject mean amplitude (z-score)",y=NULL) + style +
+    theme(legend.position="none",axis.line.y=element_blank(),axis.ticks.y=element_blank(),
+      axis.text.y=element_blank(),plot.margin=margin(3,4,2,3))
+  zoom_top <- top + labs(x="Trial amplitude (z-score)")
+  stopifnot(nrow(zoom_means)==38,all(table(zoom_means$condition)==19),
+    all(abs(zoom_means$amplitude)<=mean_zoom_limit),
+    n_distinct(zoom_means$row)==2)
+  subject_pair_means <- means %>% mutate(condition_position=as.integer(condition))
+  subject_pair_wide <- subject_pair_means %>% select(subject,condition,amplitude) %>%
+    pivot_wider(names_from=condition,values_from=amplitude)
+  stopifnot(nrow(subject_pair_wide)==19,!anyNA(subject_pair_wide))
+  three_bottom <- ggplot() +
+    geom_hline(yintercept=0,linetype="dashed",linewidth=.13,color="#B5B5B5") +
+    geom_segment(data=subject_pair_wide,aes(x=1,xend=2,y=Voluntary,yend=Involuntary),
+      color="#AFAFAF",linewidth=three_panel_pair_line_width,alpha=.65) +
+    geom_point(data=subject_pair_means,aes(x=condition_position,y=amplitude,fill=condition),
+      shape=21,color="white",size=three_panel_pair_point_size,stroke=.06,alpha=point_alpha) +
+    scale_fill_manual(values=line_colors) +
+    scale_x_continuous(limits=c(.65,2.35),breaks=NULL,expand=expansion(mult=0)) +
+    scale_y_continuous(breaks=pretty(range(means$amplitude),n=4),expand=expansion(mult=.10)) +
+    labs(x=NULL,y="Subject mean amplitude") + style +
+    theme(legend.position="none",axis.line.x=element_blank(),axis.ticks.x=element_blank(),
+      axis.text.x=element_blank(),plot.margin=margin(5,4,3,3))
+  square_distribution <- top + labs(x="Mean amplitude",title=roi_display(region_name)) +
+    theme(plot.title=element_text(size=title_size,face="bold",hjust=.5),
+      legend.text=element_text(size=font_size),legend.spacing.x=grid::unit(.04,"cm"),
+      legend.key.width=grid::unit(.16,"cm"),legend.key.height=grid::unit(.16,"cm"))
+  fix_square_panel <- function(p) {
+    g <- ggplotGrob(p)
+    panel <- which(g$layout$name=="panel")
+    stopifnot(length(panel)==1)
+    g$widths[g$layout$l[panel]] <- grid::unit(1,"null")
+    g$heights[g$layout$t[panel]] <- grid::unit(panel_height_cm,"cm")
+    g
+  }
+  square_top_grob <- fix_square_panel(square_distribution)
+  square_pair_grob <- fix_square_panel(three_bottom)
+  shared_widths <- grid::unit.pmax(square_top_grob$widths,square_pair_grob$widths)
+  shared_widths[1] <- shared_widths[1]+grid::unit(.25,"cm")
+  shared_widths[length(shared_widths)] <- shared_widths[length(shared_widths)]+grid::unit(.25,"cm")
+  panel_column <- square_top_grob$layout$l[square_top_grob$layout$name=="panel"]
+  other_width_cm <- grid::convertWidth(sum(shared_widths[-panel_column]),"cm",valueOnly=TRUE)
+  panel_width_cm <- plot_width_cm-other_width_cm
+  stopifnot(panel_width_cm>0)
+  shared_widths[panel_column] <- grid::unit(panel_width_cm,"cm")
+  square_top_grob$widths <- shared_widths
+  square_pair_grob$widths <- shared_widths
+  square_width_cm <- grid::convertWidth(sum(shared_widths),"cm",valueOnly=TRUE)
+  square_top_height_cm <- grid::convertHeight(sum(square_top_grob$heights),"cm",valueOnly=TRUE)
+  square_pair_height_cm <- grid::convertHeight(sum(square_pair_grob$heights),"cm",valueOnly=TRUE)
+  square_combined_height_cm <- square_top_height_cm+square_panel_gap_cm+square_pair_height_cm
+  square_combined <- gtable::gtable(widths=grid::unit(square_width_cm,"cm"),
+    heights=grid::unit(c(square_top_height_cm,square_panel_gap_cm,square_pair_height_cm),"cm"))
+  square_combined <- gtable::gtable_add_grob(square_combined,square_top_grob,t=1,l=1,clip="off")
+  square_combined <- gtable::gtable_add_grob(square_combined,square_pair_grob,t=3,l=1,clip="off")
+  compact_plot <- wrap_plots(zoom_top,bottom_mean_zoom,ncol=1,
+    heights=grid::unit.c(grid::unit(1,"null"),grid::unit(zoom_mean_panel_height_cm,"cm"))) +
+    plot_annotation(title=roi_display(region_name),
+      theme=theme(plot.title=element_text(family="Arial",size=title_size,face="bold",hjust=.5)))
+  exports <- list(
+    distribution_paired_square=list(plot=square_combined,width=square_width_cm,height=square_combined_height_cm),
+    distribution_square=list(plot=square_top_grob,width=square_width_cm,height=square_top_height_cm),
+    subject_pairs_square=list(plot=square_pair_grob,width=square_width_cm,height=square_pair_height_cm),
+    subject_means_zoom_compact=list(plot=compact_plot,width=plot_width_cm,height=compact_height_cm))
+  list(binding=binding_name,roi=roi_name,region=region_name,
+    lower_ms=w$primary_lower_ms[[1]],upper_ms=w$primary_upper_ms[[1]],
+    n_voluntary=sum(trials$condition=="Voluntary"),n_involuntary=sum(trials$condition=="Involuntary"),
+    subject_means=means,exports=exports)
+}
+roi_plots <- lapply(seq_len(nrow(jobs)),function(i) make_roi_plots(jobs[i,]))
+selected_panels <- bind_rows(lapply(roi_plots,function(r) tibble(binding=r$binding,roi=r$roi,
+  region=r$region,start_ms=r$lower_ms,end_ms=r$upper_ms,n_subjects=n_distinct(r$subject_means$subject),
+  n_voluntary=r$n_voluntary,n_involuntary=r$n_involuntary,n_bins=n_bins)))
+```
+
+```{r selected-panels}
+knitr::kable(selected_panels)
+```
+
+## Save the figure
+
+```{r save-figures}
+panels <- lapply(roi_plots,function(r) wrap_elements(full=r$exports$distribution_paired_square$plot))
+combined <- wrap_plots(panels,nrow=1)
+for(ext in "pdf") ggsave(file.path(fig,paste0("mean_amplitude.",ext)),combined,
+  width=sum(vapply(roi_plots,function(r)r$exports$distribution_paired_square$width,numeric(1))),height=max(vapply(roi_plots,function(r)r$exports$distribution_paired_square$height,numeric(1))),units="cm",device=if(ext=="pdf")cairo_pdf else"png",dpi=300,bg="white")
+```

@@ -1,0 +1,223 @@
+---
+title: "Mean-amplitude and ITPC coefficients"
+output: html_document
+---
+
+Five features are displayed for left pre-SMA, right precentral gyrus and right MTG. Coloured estimates have a p-value below 0.05; other estimates are grey.
+
+## Read data and set parameters
+
+```{r setup, include=FALSE}
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+library(patchwork)
+input_dir <- file.path(result_root,"05_LMM")
+fig_five <- out_dir("05_LMM",TRUE)
+dir.create(fig_five,recursive=TRUE,showWarnings=FALSE)
+```
+
+```{r plot-settings}
+plot_width_cm <- 5.4
+itpc_header_cm <- 1.0
+itpc_row_cm <- 3.5
+itpc_bottom_cm <- .2
+plot_height_cm <- itpc_header_cm + 2*itpc_row_cm + itpc_bottom_cm
+split_width_cm <- 4.5
+split_size_ratio <- split_width_cm/plot_width_cm
+split_height_cm <- plot_height_cm*split_size_ratio
+font_size <- 6
+title_size <- 7
+p_text_size <- 2.117
+fill_opacity <- .25
+non_significant_color <- "#B8B8B8"
+p_zero_gap_fraction <- .03
+plot_alpha <- .05
+plot_versions <- "01_sig_gray"
+plot_terms <- c("meanAmplitude","Delta_bandITPC","Theta_bandITPC","Alpha_bandITPC","Beta_bandITPC")
+term_labels <- c(meanAmplitude="Mean\namplitude",Delta_bandITPC="Delta",Theta_bandITPC="Theta",
+                 Alpha_bandITPC="Alpha",Beta_bandITPC="Beta")
+condition_colors <- list(action=c(Voluntary="#1E90FF",Involuntary="#FF7518"),
+                         outcome=c(Voluntary="#0BDA51",Involuntary="#FF69B4"))
+```
+
+```{r prepare-data}
+fixed <- read_csv(file.path(input_dir,"fixed_effects.csv"),show_col_types=FALSE)
+windows <- read_csv(file.path(cache_root,"05_LMM/models/windows_used.csv"),show_col_types=FALSE)
+data_tables <- list()
+for (b in c("action","outcome")) {
+  conds <- if(b=="action") c("va_a","ia_a") else c("vs_s","is_s")
+  f <- fixed %>% filter(binding==b,term %in% plot_terms,condition %in% conds)
+  stopifnot(!anyDuplicated(f[c("roi","term","condition")]))
+  v <- f %>% filter(condition==conds[1]) %>% select(roi,term,p_v=p_value)
+  inv <- f %>% filter(condition==conds[2]) %>% select(roi,term,p_i=p_value)
+  followup_rois <- fixed %>% filter(binding==b,condition==conds[2]) %>% distinct(roi) %>% pull(roi)
+  selected_rois <- intersect(manuscript_rois,followup_rois)
+  roi_order <- windows %>% filter(binding==b,roi %in% selected_rois) %>%
+    arrange(primary_lower_ms,region) %>% pull(roi)
+  d <- f %>% filter(roi %in% roi_order) %>%
+    mutate(term_label=unname(term_labels[term]),
+           y=2*(length(plot_terms)+1-match(term,plot_terms)),
+           condition_label=factor(if_else(condition==conds[1],"Voluntary","Involuntary"),
+                                  levels=c("Voluntary","Involuntary")),
+           pos=y+if_else(condition==conds[1],.4,-.4),
+           sig=is.finite(p_value) & p_value<plot_alpha,
+           p_label=if_else(p_value<.001,"p < .001",sprintf("p = %.3f",p_value)))
+  stopifnot(nrow(d)==10*length(roi_order),
+            all(is.finite(as.matrix(d[c("estimate","conf_low","conf_high")]))))
+  for (r in roi_order) stopifnot(setequal(d$term[d$roi==r],plot_terms))
+  data_tables[[b]] <- list(data=d,roi_order=roi_order)
+}
+```
+
+## Plot coefficients
+
+```{r plot-function}
+plot_condition_five <- function(data,roi_name,colors,condition_name,show_x_title=TRUE) {
+  all_d <- filter(data,roi==roi_name)
+  xr <- range(c(all_d$conf_low,all_d$conf_high,0))
+  span <- max(diff(xr),1)
+  all_d <- all_d %>% mutate(
+    term_label=if_else(term=="meanAmplitude","MA",term_label),
+    pos=y,plot_group=if_else(sig,as.character(condition_label),"Not significant"),
+    p_on_left=estimate>=0,
+    p_x=if_else(p_on_left,-p_zero_gap_fraction*span,p_zero_gap_fraction*span),
+    p_hjust=if_else(p_on_left,1,0))
+  p_all <- filter(all_d,sig)
+  left <- min(xr[1]-.08*span,if(nrow(p_all)>0)
+    min(p_all$p_x-ifelse(p_all$p_on_left,.23*span,0)) else Inf)
+  right <- max(xr[2]+.08*span,if(nrow(p_all)>0)
+    max(p_all$p_x+ifelse(p_all$p_on_left,0,.23*span)) else -Inf)
+  d <- filter(all_d,as.character(condition_label)==condition_name)
+  ticks <- distinct(d,y,term_label) %>% arrange(y)
+  palette <- c(colors,"Not significant"=non_significant_color)
+  ggplot(d,aes(color=plot_group,fill=plot_group)) +
+    geom_rect(aes(xmin=pmin(0,estimate),xmax=pmax(0,estimate),ymin=pos-.25,ymax=pos+.25),
+      color=NA,alpha=fill_opacity) +
+    geom_vline(xintercept=0,color="#B0B0B0",linetype="dashed",linewidth=.20) +
+    geom_segment(aes(x=conf_low,xend=conf_high,y=pos,yend=pos),linewidth=.36) +
+    geom_segment(aes(x=conf_low,xend=conf_low,y=pos-.14,yend=pos+.14),linewidth=.30) +
+    geom_segment(aes(x=conf_high,xend=conf_high,y=pos-.14,yend=pos+.14),linewidth=.30) +
+    geom_point(aes(x=estimate,y=pos),shape=if(condition_name=="Voluntary") 15 else 16,size=1.55) +
+    geom_text(data=filter(d,sig),aes(x=p_x,y=pos,label=p_label,hjust=p_hjust),
+      size=max(p_text_size,font_size/ggplot2::.pt),vjust=.5) +
+    scale_color_manual(values=palette,guide="none") +
+    scale_fill_manual(values=palette,guide="none") +
+    scale_x_continuous(breaks=scales::breaks_pretty(n=5),expand=expansion(mult=0)) +
+    scale_y_continuous(breaks=ticks$y,labels=ticks$term_label,expand=expansion(mult=0)) +
+    coord_cartesian(xlim=c(left,right),ylim=c(min(d$y)-.8,max(d$y)+.8),clip="off") +
+    labs(title=condition_name,x=if(show_x_title) "Estimated coefficient (95% CI)" else NULL,y=NULL) +
+    theme_classic(base_family="Arial",base_size=font_size) +
+    theme(plot.title=element_text(size=title_size,face="bold",color=colors[[condition_name]],
+                                  hjust=0,margin=margin(b=3)),
+      axis.text=element_text(size=font_size,color="#222222"),
+      axis.title.x=element_text(size=font_size,margin=margin(t=3)),
+      axis.line.y=element_blank(),axis.ticks.y=element_blank(),
+      axis.line.x=element_line(linewidth=.2,color="#555555"),
+      axis.ticks.x=element_line(linewidth=.18,color="#555555"),
+      axis.ticks.length=grid::unit(2,"pt"),legend.position="none",plot.margin=margin(3,5,3,3))
+}
+
+plot_five <- function(data,roi_name,colors,version=c("01_sig_gray","02_all_colored")) {
+  version <- match.arg(version)
+  if(version=="01_sig_gray") {
+    upper <- plot_condition_five(data,roi_name,colors,"Voluntary",show_x_title=FALSE)
+    lower <- plot_condition_five(data,roi_name,colors,"Involuntary",show_x_title=TRUE)
+    return(wrap_plots(list(upper,lower),ncol=1,heights=c(1,1)) +
+      plot_annotation(title=roi_display(sub("([LR])$","-\\1",roi_name)),
+        theme=theme(plot.title=element_text(family="Arial",size=title_size,face="bold",hjust=.5,
+                                           margin=margin(b=3)))))
+  }
+  d <- filter(data,roi==roi_name)
+  gray_version <- version=="01_sig_gray"
+  d <- d %>% mutate(
+    term_label=if_else(!gray_version & term=="meanAmplitude","MA",term_label),
+    plot_group=if_else(gray_version & !sig,"Not significant",as.character(condition_label)))
+  xr <- range(c(d$conf_low,d$conf_high,0))
+  span <- max(diff(xr),1)
+  if(gray_version) {
+    d <- d %>% mutate(
+      p_on_left=estimate>=0,
+      p_x=if_else(p_on_left,-p_zero_gap_fraction*span,p_zero_gap_fraction*span),
+      p_y=pos,p_hjust=if_else(p_on_left,1,0),p_vjust=.5)
+    p_rows <- filter(d,sig)
+    left <- min(xr[1]-.08*span,if(nrow(p_rows)>0)
+      min(p_rows$p_x-ifelse(p_rows$p_on_left,.23*span,0)) else Inf)
+    right <- max(xr[2]+.08*span,if(nrow(p_rows)>0)
+      max(p_rows$p_x+ifelse(p_rows$p_on_left,0,.23*span)) else -Inf)
+  } else {
+    d <- d %>% mutate(p_on_left=FALSE,p_x=estimate,p_y=pos+.18,p_hjust=.5,p_vjust=0)
+    p_rows <- filter(d,sig)
+    left <- xr[1]-.08*span
+    right <- xr[2]+.08*span
+  }
+  ticks <- distinct(d,y,term_label) %>% arrange(y)
+  palette <- c(colors,"Not significant"=non_significant_color)
+  ggplot(d,aes(color=plot_group,fill=plot_group)) +
+    geom_rect(aes(xmin=pmin(0,estimate),xmax=pmax(0,estimate),ymin=pos-.22,ymax=pos+.22),
+              color=NA,alpha=fill_opacity,show.legend=FALSE) +
+    geom_vline(xintercept=0,color="#B0B0B0",linetype="dashed",linewidth=.20) +
+    geom_segment(aes(x=conf_low,xend=conf_high,y=pos,yend=pos),linewidth=.36,show.legend=FALSE) +
+    geom_segment(aes(x=conf_low,xend=conf_low,y=pos-.10,yend=pos+.10),linewidth=.30,show.legend=FALSE) +
+    geom_segment(aes(x=conf_high,xend=conf_high,y=pos-.10,yend=pos+.10),linewidth=.30,show.legend=FALSE) +
+    geom_point(aes(x=estimate,y=pos,shape=condition_label),size=1.55) +
+    geom_text(data=p_rows,aes(x=p_x,y=p_y,label=p_label,hjust=p_hjust,vjust=p_vjust),
+              size=p_text_size,show.legend=FALSE) +
+    scale_color_manual(values=palette,guide="none") +
+    scale_fill_manual(values=palette,guide="none") +
+    scale_shape_manual(values=c(Voluntary=15,Involuntary=16),name=NULL,drop=FALSE,
+      guide=guide_legend(override.aes=list(color=unname(colors),fill=unname(colors),alpha=1))) +
+    scale_x_continuous(breaks=scales::breaks_pretty(n=5),expand=expansion(mult=0)) +
+    scale_y_continuous(breaks=ticks$y,labels=ticks$term_label,expand=expansion(mult=0)) +
+    coord_cartesian(xlim=c(left,right),
+                    ylim=c(min(d$pos)-.37,max(d$pos)+.72),clip="off") +
+    labs(title=roi_display(sub("([LR])$","-\\1",roi_name)),x="Estimated coefficient (95% CI)",y=NULL) +
+    theme_classic(base_family="Arial",base_size=font_size) +
+    theme(
+      plot.title=element_text(size=title_size,face="bold",hjust=.5,margin=margin(b=4)),
+      plot.title.position="plot",
+      axis.text=element_text(size=font_size,color="#222222"),
+      axis.title.x=element_text(size=font_size,margin=margin(t=3)),
+      axis.line.y=element_blank(),axis.ticks.y=element_blank(),
+      axis.line.x=element_line(linewidth=.2,color="#555555"),
+      axis.ticks.x=element_line(linewidth=.18,color="#555555"),
+      axis.ticks.length=grid::unit(2,"pt"),
+      legend.position="top",legend.justification="center",legend.location="plot",
+      legend.text=element_text(size=font_size),
+      legend.key.width=grid::unit(8,"pt"),legend.key.height=grid::unit(5,"pt"),
+      legend.margin=margin(0,0,0,0),legend.box.spacing=grid::unit(0,"pt"),
+      plot.margin=margin(3,5,3,3)
+    )
+}
+```
+
+```{r build-plots}
+five_plots <- list()
+for(version in plot_versions) {
+  five_plots[[version]] <- list()
+  for (b in names(data_tables)) {
+    item <- data_tables[[b]]
+    for(r in item$roi_order) {
+      five_plots[[version]][[paste(b,r,sep="_")]] <-
+        plot_five(item$data,r,condition_colors[[b]],version)
+    }
+  }
+}
+```
+
+```{r preview-gray, echo=FALSE, fig.width=split_width_cm/2.54, fig.height=split_height_cm/2.54}
+five_plots[["01_sig_gray"]]$action_PreSMAL
+```
+
+## Save the figure
+
+```{r save-figures}
+panels <- five_plots[["01_sig_gray"]]
+combined <- wrap_plots(lapply(panels,function(p) wrap_elements(full=p)),nrow=1)
+for(ext in "pdf") ggsave(file.path(fig_five,paste0("lmm_coefficients.",ext)),combined,
+  width=split_width_cm*length(panels),height=split_height_cm,units="cm",device=if(ext=="pdf")cairo_pdf else"png",dpi=300,bg="white")
+```

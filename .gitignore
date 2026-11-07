@@ -1,0 +1,8 @@
+.Rproj.user/
+.Rhistory
+.RData
+renv/library/
+analysis/.cache/*
+!analysis/.cache/derived/
+__pycache__/
+*.pyc

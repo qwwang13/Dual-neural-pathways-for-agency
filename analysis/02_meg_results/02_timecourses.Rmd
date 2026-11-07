@@ -1,0 +1,125 @@
+---
+title: "MEG amplitude time courses"
+output: html_document
+---
+
+## Read data
+
+Load the functions and read the four condition summaries from `data/02_meg_results`. These contain regional means and between-participant standard errors.
+
+```{r setup, message=FALSE, warning=FALSE}
+if(.Platform$OS.type=="windows") invisible(Sys.setlocale("LC_CTYPE","English_United States.utf8"))
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+```
+
+```{r}
+source(file.path(project_root,"analysis/02_meg_results/meg_timecourse_plot_utils.R"),local=TRUE,encoding="UTF-8")
+
+dir_data <- file.path(data_root,"02_meg_results")
+dir_out <- out_dir("02_meg_results",TRUE)
+
+ensure_dir(dir_out)
+```
+
+```{r read-data}
+dat_action <- bind_rows(
+  read_tc_summary(
+    path = file.path(dir_data, "ta_action_va_12.csv"),
+    condition_label = "Voluntary",
+    roi_order = roi12
+  ),
+  read_tc_summary(
+    path = file.path(dir_data, "ta_action_ia_12.csv"),
+    condition_label = "Involuntary",
+    roi_order = roi12
+  )
+)
+
+dat_outcome <- bind_rows(
+  read_tc_summary(
+    path = file.path(dir_data, "ta_outcome_vs_12.csv"),
+    condition_label = "Voluntary",
+    roi_order = roi12
+  ),
+  read_tc_summary(
+    path = file.path(dir_data, "ta_outcome_is_12.csv"),
+    condition_label = "Involuntary",
+    roi_order = roi12
+  )
+)
+```
+
+## Plot time courses
+
+Set the colours, fonts and panel dimensions, then draw the action- and outcome-binding panels.
+
+```{r plot-settings}
+font_size <- 6
+line_width <- .35
+plot_width_cm <- 16.29
+plot_height_cm <- 10.5
+dpi <- 300
+action_highlight_rois <- c("DLPFCR","PreSMAL","PreSMAR","SMAR","InsulaR","AGR")
+outcome_highlight_rois <- c("PrecentralR","PostcentralL","PostcentralR","SPGL","PrecuneusR","MTGR")
+highlight_border_color <- "#A236B9"
+highlight_border_width <- .90
+normal_border_width <- .20
+pal_action_line <- c(Voluntary="#1E90FF",Involuntary="#FF7518")
+pal_action_fill <- c(Voluntary="#9FD0F2",Involuntary="#FFC980")
+pal_outcome_line <- c(Voluntary="#0BDA51",Involuntary="#FF69B4")
+pal_outcome_fill <- c(Voluntary="#B4E39A",Involuntary="#F9D1DC")
+ribbon_alpha_action <- c(Voluntary=.75,Involuntary=.80)
+ribbon_alpha_outcome <- c(Voluntary=.75,Involuntary=.80)
+```
+
+```{r plot-action, fig.width=plot_width_cm/2.54, fig.height=plot_height_cm/2.54, dpi=dpi, out.width="100%"}
+
+p_action <- plot_mean_SE_tc(
+  dat = dat_action,
+  pal_line = pal_action_line,
+  pal_fill = pal_action_fill,
+  title_text = "Action binding",
+  ncol = 4,
+  ribbon_order = c("Involuntary", "Voluntary"),
+  ribbon_alpha = ribbon_alpha_action,
+  border_lw=normal_border_width, base_size=font_size, line_width=line_width,
+  highlight_regions=action_highlight_rois,
+  highlight_border_color=highlight_border_color, highlight_border_lw=highlight_border_width
+)
+
+p_action
+```
+
+```{r plot-outcome, fig.width=plot_width_cm/2.54, fig.height=plot_height_cm/2.54, dpi=dpi, out.width="100%"}
+
+p_outcome <- plot_mean_SE_tc(
+  dat = dat_outcome,
+  pal_line = pal_outcome_line,
+  pal_fill = pal_outcome_fill,
+  title_text = "Outcome binding",
+  ncol = 4,
+  ribbon_order = c("Involuntary", "Voluntary"),
+  ribbon_alpha = ribbon_alpha_outcome,
+  border_lw=normal_border_width, base_size=font_size, line_width=line_width,
+  highlight_regions=outcome_highlight_rois,
+  highlight_border_color=highlight_border_color, highlight_border_lw=highlight_border_width
+)
+
+p_outcome
+```
+
+## Save the figure
+
+Save the combined PDF to `figures/02_meg_results/meg_timecourses.pdf`.
+
+```{r save-figures}
+combined <- patchwork::wrap_plots(p_action,p_outcome,ncol=1)
+for(ext in "pdf") ggsave(file.path(dir_out,paste0("meg_timecourses.",ext)),combined,
+  width=plot_width_cm,height=2*plot_height_cm,units="cm",device=if(ext=="pdf")cairo_pdf else"png",dpi=300,bg="white")
+```

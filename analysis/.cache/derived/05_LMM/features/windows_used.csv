@@ -1,0 +1,7 @@
+region,primary_lower_ms,primary_upper_ms,binding,primary_window,roi,file
+PreSMA-R,180,240,action,180–240,PreSMAR,PreSMAR_action_ba.csv
+PreSMA-L,220,270,action,220–270,PreSMAL,PreSMAL_action_ba.csv
+Insula-R,570,620,action,570–620,InsulaR,InsulaR_action_ba.csv
+Precentral-R,180,240,outcome,180–240,PrecentralR,PrecentralR_outcome_bs.csv
+Postcentral-L,200,300,outcome,200–300,PostcentralL,PostcentralL_outcome_bs.csv
+MTG-R,780,830,outcome,780–830,MTGR,MTGR_outcome_bs.csv

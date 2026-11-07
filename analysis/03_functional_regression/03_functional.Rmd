@@ -1,0 +1,156 @@
+---
+title: "Sparse functional regression"
+output: html_document
+---
+
+Run all code chunks in order. To redraw saved results, run the setup chunk and the Plot and save section.
+
+## Read data
+
+Load the functions and analysis settings, then read the neural and behavioural contrasts from `data/03_functional_regression`.
+
+```{r setup, include=FALSE}
+if(.Platform$OS.type=="windows") invisible(Sys.setlocale("LC_CTYPE","English_United States.utf8"))
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+source(file.path(project_root,"analysis/03_functional_regression/elasticnet_fit.R"),local=TRUE,encoding="UTF-8")
+source(file.path(project_root,"analysis/03_functional_regression/functional_binding_functions.R"),local=TRUE,encoding="UTF-8")
+source(file.path(project_root,"analysis/03_functional_regression/functional_inputs.R"),local=TRUE,encoding="UTF-8")
+source(file.path(project_root,"analysis/03_functional_regression/fun_plot_functional_regression.R"),local=TRUE,encoding="UTF-8")
+out <- out_dir("03_functional_regression")
+fig <- out_dir("03_functional_regression",TRUE)
+```
+
+```{r model-settings}
+alpha_grid <- seq(.1,1,by=.1)
+n_lambda <- 100
+
+selection_rules <- list(
+  conti_p=list(`10`=1:20,`20`=1:10,`40`=1:5),
+  gap_ms=c(`10`=20,`20`=20,`40`=20),
+  min_span_ms=40,
+  density_cap=.20,
+  outside_runs_cap=5
+)
+```
+
+```{r read-model-data}
+bindings <- c("action","outcome")
+configs <- setNames(lapply(bindings,function(b) binding_settings(b,selection_rules)),bindings)
+model_inputs <- setNames(lapply(bindings,function(b) {
+  binding_read_inputs(b,configs[[b]])
+}),bindings)
+```
+
+## Run functional regression
+
+Fit the alpha/lambda paths, select models and common time windows, and save the two coefficient tables in `results/03_functional_regression`.
+
+```{r fit-models}
+model_paths <- setNames(lapply(bindings,function(b) {
+  binding_load_paths(project_root,b,configs[[b]],alpha_grid,n_lambda,
+    inputs=model_inputs[[b]])
+}),bindings)
+```
+
+```{r select-windows}
+selected_models <- list()
+windows <- list()
+for(b in bindings) {
+  scan <- binding_scan_models(model_paths[[b]]$models,configs[[b]])
+  selected_models[[b]] <- binding_select_windows(scan,configs[[b]])
+  windows[[b]] <- selected_models[[b]]$choices %>%
+    filter(auto_passed,primary_upper_ms<=report_end_ms) %>%
+    mutate(binding=b,.before=1) %>% arrange(primary_lower_ms,region)
+}
+```
+
+```{r save-coefficients}
+for(b in bindings) {
+  coefficients <- selected_models[[b]]$coefficients %>%
+    inner_join(select(windows[[b]],region,primary_lower_ms,primary_upper_ms),by="region") %>%
+    transmute(region,time_window,lower,upper,coef=coef/(time_window/10),
+      primary_lower_ms,primary_upper_ms)
+  write_csv(coefficients,file.path(out,paste0(b,"_binding.csv")))
+}
+final <- read_functional_windows()
+knitr::kable(select(final,binding,region,primary_window))
+```
+
+## Plot and save
+
+Read the saved results and mean time courses, define the figure appearance, and save the combined PDF in `figures/03_functional_regression`.
+
+```{r plot-inputs}
+final <- read_functional_windows()
+action_windows <- final %>% filter(binding=="action") %>% arrange(primary_lower_ms,region)
+outcome_windows <- final %>% filter(binding=="outcome") %>% arrange(primary_lower_ms,region)
+action_coef <- read_csv(file.path(out,"action_binding.csv"),show_col_types=FALSE)
+outcome_coef <- read_csv(file.path(out,"outcome_binding.csv"),show_col_types=FALSE)
+action_mean <- read_csv(file.path(data_root,"03_functional_regression/plot_data/meg_mean_action.csv"),show_col_types=FALSE)
+outcome_mean <- read_csv(file.path(data_root,"03_functional_regression/plot_data/meg_mean_outcome.csv"),show_col_types=FALSE)
+```
+
+```{r plot-settings}
+# Smoothing affects the displayed coefficient curve, not model selection.
+smooth_span_action <- c("PreSMA-R"=.40,"PreSMA-L"=.60,"Insula-R"=.75)
+smooth_span_outcome <- c("Precentral-R"=.75,"Postcentral-L"=.75,"MTG-R"=.75)
+column_widths <- c(1.42,.7,.7)
+font_size <- 6
+font_family <- "Arial"
+reverse_amp_y <- FALSE
+reverse_coef_y <- FALSE
+image_width <- 15.0/2.54
+action_height <- (1.5+3.0*nrow(action_windows))/2.54
+outcome_height <- (1.5+3.0*nrow(outcome_windows))/2.54
+dpi <- 300
+
+style_action <- list(legend_position="right",
+  overlap_fill=c(`1`="grey94",`2`="grey88",`3`="grey73"), overlap_alpha=.55,
+  line_colors=c(vaa_ba="#1E90FF",iaa_bi="#FF7518",vaa_iaa="#C1272D"),
+  line_lty=c(vaa_ba=5,iaa_bi=5,vaa_iaa=1),
+  line_labels=c(vaa_ba="Voluntary",iaa_bi="Involuntary",vaa_iaa="Difference"),
+  coef_shapes=c(`10`=15,`20`=16,`40`=17),coef_point_color="grey50",smooth_color="#A236B9"
+)
+style_outcome <- style_action
+style_outcome$line_colors <- c(vss_bs="#0BDA51",iss_bs="#FF69B4",vss_iss="#C1272D")
+style_outcome$line_lty <- c(vss_bs=5,iss_bs=5,vss_iss=1)
+style_outcome$line_labels <- c(vss_bs="Voluntary",iss_bs="Involuntary",vss_iss="Difference")
+```
+
+```{r plot-action, fig.width=image_width, fig.height=action_height, out.width="100%"}
+p_action <- plot_binding_by_columns(
+  df_meg_mean_raw=action_mean,coef_df_raw=action_coef,
+  regions_name=action_windows$region,
+  border_df=transmute(action_windows,region,xmin=primary_lower_ms,xmax=primary_upper_ms),
+  condition_order=c("vaa_ba","iaa_bi","vaa_iaa"),style=style_action,
+  smooth_span=smooth_span_action,time_min=0,time_max=1000,
+  overlap_step_ms=10,reverse_amp_y=reverse_amp_y,reverse_coef_y=reverse_coef_y,
+  plot_widths=column_widths,base_size=font_size,base_family=font_family
+)
+p_action
+```
+
+```{r plot-outcome, fig.width=image_width, fig.height=outcome_height, out.width="100%"}
+p_outcome <- plot_binding_by_columns(
+  df_meg_mean_raw=outcome_mean,coef_df_raw=outcome_coef,
+  regions_name=outcome_windows$region,
+  border_df=transmute(outcome_windows,region,xmin=primary_lower_ms,xmax=primary_upper_ms),
+  condition_order=c("vss_bs","iss_bs","vss_iss"),style=style_outcome,
+  smooth_span=smooth_span_outcome,time_min=0,time_max=1000,
+  overlap_step_ms=10,reverse_amp_y=reverse_amp_y,reverse_coef_y=reverse_coef_y,
+  plot_widths=column_widths,base_size=font_size,base_family=font_family
+)
+p_outcome
+```
+
+```{r save-figures}
+combined <- patchwork::wrap_plots(p_action,p_outcome,ncol=1,heights=c(action_height,outcome_height))
+for(ext in "pdf") ggsave(file.path(fig,paste0("functional_regression.",ext)),combined,
+  width=image_width*2.54,height=(action_height+outcome_height)*2.54,units="cm",device=if(ext=="pdf")cairo_pdf else"png",dpi=300,bg="white")
+```

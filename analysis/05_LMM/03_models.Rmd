@@ -1,0 +1,90 @@
+---
+title: "Condition-specific mixed-effects models"
+output: html_document
+---
+
+Models are first fitted in the voluntary condition for all retained regions. Regions with at least one neural predictor having p < 0.05 are then fitted in the involuntary condition using the same nine-predictor model. The intercept is excluded from screening. The response remains in milliseconds. The nine neural predictors are standardized separately within each condition after trial matching. Each model includes a participant random intercept and is fitted by maximum likelihood. ITPC is a participant-by-condition feature repeated across that participant’s trials. Coefficient p-values are two-sided.
+
+## Read data
+
+```{r setup, include=FALSE}
+root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
+  parent <- dirname(root)
+  if(identical(parent,root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  root <- parent
+}
+source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
+out <- out_dir("05_LMM"); model_cache <- cache_dir("05_LMM/models")
+```
+
+```{r read-model-data}
+source(file.path(project_root,"analysis/05_LMM/fun_lmm_split.R"),encoding="UTF-8",local=TRUE)
+w <- read_functional_windows() %>%
+  mutate(roi=gsub("-","",region))
+used <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE)
+key <- c("binding","region","primary_lower_ms","primary_upper_ms")
+stopifnot(isTRUE(all.equal(as.data.frame(arrange(w,binding,region)[key]),
+  as.data.frame(arrange(used,binding,region)[key]),check.attributes=FALSE)))
+```
+
+## Fit and compare models
+
+```{r fit-models}
+screen_alpha <- .05
+tables <- list(); counts <- list(); voluntary_fits <- list()
+fit_condition <- function(one,condition) {
+  filename <- paste0(one$roi,if(one$binding=="action")"_action_ba.csv"else"_outcome_bs.csv")
+  fit <- run_lmm_split(file.path(cache_root,"05_LMM/features",filename),
+    file.path(data_root,"05_LMM/behavior_single_trial.csv"),
+    scale_features=TRUE,condition_levels=condition,exclude_subjects=NULL)
+  dat <- fit$data
+  check19(as.integer(as.character(dat$subject)))
+  stopifnot(all(is.finite(dat$behavior_value)),all(is.finite(as.matrix(dat[fit$predictors]))),
+    nrow(model.frame(fit$models[[condition]]))==nrow(dat),length(fit$predictors)==9,
+    all(abs(colMeans(dat[fit$predictors])) < 1e-8),
+    all(abs(vapply(dat[fit$predictors],sd,numeric(1))-1) < 1e-8))
+  fit
+}
+record_fit <- function(fit,one,tag) {
+  tables[[tag]] <<- mutate(fit$fixed_table,binding=one$binding,roi=one$roi,.before=1)
+  counts[[tag]] <<- fit$data %>% count(condition,subject,name="n_trials") %>%
+    mutate(binding=one$binding,roi=one$roi)
+}
+# Screen all regions using the voluntary models.
+for(i in seq_len(nrow(w))) {
+  one <- w[i,]
+  condition <- if(one$binding=="action")"va_a"else"vs_s"
+  tag <- paste(one$binding,one$roi,condition,sep="_")
+  fit <- fit_condition(one,condition)
+  voluntary_fits[[tag]] <- fit
+  record_fit(fit,one,tag)
+}
+voluntary_results <- bind_rows(tables)
+followup_regions <- voluntary_results %>%
+  filter(term!="(Intercept)",is.finite(p_value),p_value<screen_alpha) %>%
+  distinct(binding,roi)
+# Fit involuntary models only for regions selected in the voluntary screen.
+followup_windows <- semi_join(w,followup_regions,by=c("binding","roi"))
+for(i in seq_len(nrow(followup_windows))) {
+  one <- followup_windows[i,]
+  condition <- if(one$binding=="action")"ia_a"else"is_s"
+  tag <- paste(one$binding,one$roi,condition,sep="_")
+  fit <- fit_condition(one,condition)
+  record_fit(fit,one,tag)
+}
+fixed <- bind_rows(tables)
+```
+
+## Save results
+
+```{r save-results}
+write_csv(fixed,file.path(out,"fixed_effects.csv"))
+write_csv(bind_rows(counts),file.path(model_cache,"matched_trial_counts.csv"))
+write_csv(w,file.path(model_cache,"windows_used.csv"))
+```
+
+```{r}
+knitr::kable(fixed,digits=4)
+```
+
