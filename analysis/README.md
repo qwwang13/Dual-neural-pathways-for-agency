@@ -8,7 +8,9 @@ Run scripts from the repository root. Each module contains its workflow files an
 
 Action-binding tests use the greater-than-zero alternative; outcome-binding tests use the less-than-zero alternative. The paired outcome test uses voluntary minus involuntary with a less-than-zero alternative. Reported V is the larger signed-rank sum; both rank sums are retained in the output tables.
 
-## MEG time courses
+## MEG permutation tests and time courses
+
+[`02_meg_results/a01_permutation_tests.m`](02_meg_results/a01_permutation_tests.m) is the original Brainstorm export: paired two-sided t-statistic permutation tests, 1,000 randomizations and a 0-1 s window. The 19 paired file lists for each comparison are preserved. Use MATLAB/Brainstorm with the matching group studies; the large input archives and saved maps are prepared as separate Release assets. See [the module instructions](02_meg_results/README.md) for the protocol paths and the separate FDR display settings.
 
 [`02_meg_results/02_timecourses.Rmd`](02_meg_results/02_timecourses.Rmd) reads the supplied regional means and between-participant standard errors, plots the voluntary and involuntary conditions, and saves the combined 12-region time-course figure. Run with `Rscript analysis/run.R meg`.
 
@@ -63,8 +65,16 @@ ITPC is computed across trials within each participant and condition. Figure 4 s
 
 The analysis uses patient 2, channel `chan83-chan84`, and patient 4, channel `chan10-chan11`.
 
+## Supplementary robustness analyses
+
+[`07_supplementary_robustness/07_robustness.R`](07_supplementary_robustness/07_robustness.R) runs both supplementary analyses with base R. Run `Rscript --vanilla analysis/run.R robustness`, or open the script in RStudio and click Source.
+
+The behavioural component uses default JZS Bayesian one-sample and paired t tests with Cauchy scale sqrt(2)/2. The paired comparison uses the voluntary-minus-involuntary outcome shift. The ITPC component fits separate participant-level regressions with intercepts in each condition and compares their slopes using 20,000 paired participant bootstrap draws. ITPC remains on its original scale and behaviour remains in milliseconds; 95% intervals use the percentile method.
+
+The original behavioural summary and supplied compact ITPC table are sufficient for this step. The optional `prepare_inputs.py` recovers the compact ITPC values from the existing MEG feature tables and regenerates the saved PCG64 bootstrap draws (seed 20261109); its NumPy requirement is listed in the module. See [the module README](07_supplementary_robustness/README.md) for details.
+
 ## Input preparation and execution
 
 MEG and behavioural inputs already contain the corresponding participant-specific baseline correction. Each behavioural trial has the participant's baseline-condition average subtracted. Each MEG trial has the participant's baseline-condition mean waveform subtracted at the same region and time point before feature extraction. Voluntary action uses `ba`, involuntary movement uses `bi`, and both outcome conditions use `bs`. Functional-regression and network contrasts are voluntary minus involuntary after baseline correction. See [the data documentation](../data/README.md) for the condition codes.
 
-The R runner executes the report chunks and saves tables and figures. Append `--html` to render an HTML report with Pandoc. The project root is identified by `dual-agency-pathways.Rproj`; `DUAL_AGENCY_ROOT` can specify it explicitly. `DUAL_AGENCY_R_LIBRARY` can point to an existing R package library.
+The R runner executes the report chunks and saves tables and figures. For the R Markdown modules, append `--html` to render an HTML report with Pandoc. The `robustness` step directly saves CSV tables and a Markdown summary. The project root is identified by `dual-agency-pathways.Rproj`; `DUAL_AGENCY_ROOT` can specify it explicitly. `DUAL_AGENCY_R_LIBRARY` can point to an existing R package library.

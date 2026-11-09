@@ -7,10 +7,11 @@ The supplied files are preprocessed inputs for the behavioural, MEG and intracra
 | Folder | Contents |
 |---|---|
 | `01_temporal_binding_effect` | One row per participant, containing baseline-corrected action and outcome perceptual shifts |
-| `02_meg_results` | Regional time-course summaries with `region`, `Time`, `condition`, `Value` and `SE` |
+| `02_meg_results` | Regional mean/standard-error summaries, plus `meg/` source-map archive inventories and exact permutation input pairs |
 | `03_functional_regression` | Participant-level neural and behavioural voluntary-minus-involuntary contrasts, plus mean curves for plotting |
 | `05_LMM` | Baseline-corrected regional single-trial MEG epochs (`.csv.gz`) and matched behavioural responses |
 | `06_ieeg` | MTG bipolar-channel epochs and behavioural responses for patients 2 and 4 |
+| `07_supplementary_robustness` | Participant-level ITPC values, paired-bootstrap row indices and source metadata |
 
 ## Identifiers and units
 
@@ -83,3 +84,13 @@ The functional-regression and network contrasts are voluntary minus involuntary,
 - `Involuntary_OutcomeOnsetReportSound`: involuntary condition, epochs referenced to outcome onset, with sound-time reports.
 
 Intracranial features are extracted directly from the supplied patient epochs.
+
+## Supplementary robustness inputs
+
+The Bayesian tests reuse `01_temporal_binding_effect/perceptual_shift_action_outcome.csv`. The supplementary folder contains `participant_itpc.csv`: 152 rows spanning the four selected region-band comparisons, two conditions and 19 participants. `itpc` is the existing across-trial ITPC value for that participant and condition; `lower_ms` and `upper_ms` identify the feature window. The comparisons are PreSMA-L theta (220-270 ms), PreCG-R alpha (180-240 ms), and MTG-R delta/theta (780-830 ms).
+
+`bootstrap_indices.csv` contains 20,000 rows of 19 participant-row positions, sampled with replacement. Positions 1-19 refer to participants 2-20 in ascending order; each row is applied to both conditions together. The draws use NumPy PCG64 seed 20261109. `source_files.csv` records the processed source paths and SHA256 hashes. `input_checksums.csv` records MD5 hashes after normalizing CRLF to LF, so input checks work with either Git text checkout setting.
+
+## Fig. 2 permutation-test source maps
+
+The `02_meg_results/meg` folder contains the inventories and instructions for 15 large input archives with 76 Brainstorm source-map MAT files. `input_pairs.csv` preserves the original ordering of the 19 paired maps in each comparison. Archive names, sizes and SHA256 hashes are listed in `archives.csv`. The local binary archives are excluded from ordinary Git tracking and are prepared for separate Release distribution. See [the source-map README](02_meg_results/meg/README.md) for the layout.

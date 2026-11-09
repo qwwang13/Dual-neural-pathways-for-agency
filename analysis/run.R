@@ -2,6 +2,10 @@ args <- commandArgs(trailingOnly=TRUE)
 file_arg <- grep("^--file=",commandArgs(),value=TRUE)
 root <- normalizePath(file.path(dirname(sub("^--file=","",file_arg[1])),".."),winslash="/",mustWork=TRUE)
 Sys.setenv(DUAL_AGENCY_ROOT=root)
+# The supplementary module runs with base R and its supplied inputs.
+if(length(args) && identical(args[1L], "robustness")) {
+  source(file.path(root, "analysis/07_supplementary_robustness/07_robustness.R"), encoding="UTF-8")
+} else {
 source(file.path(root,"analysis/common.R"))
 steps <- c(behavior="01_temporal_binding_effect/01_behavior.Rmd",meg="02_meg_results/02_timecourses.Rmd",
  functional="03_functional_regression/03_functional.Rmd",models="05_LMM/03_models.Rmd",
@@ -28,4 +32,5 @@ if(html) {
   }
   grDevices::dev.off()
   message("Completed ",step,". Outputs: ",out_dir(folders[[step]]))
+}
 }

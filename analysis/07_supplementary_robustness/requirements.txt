@@ -1,0 +1,2 @@
+# Needed only to recreate participant inputs and bootstrap indices.
+numpy==2.3.5

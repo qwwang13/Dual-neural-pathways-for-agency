@@ -19,6 +19,7 @@ dual-agency-pathways/
 │   ├── 04_network/
 │   ├── 05_LMM/
 │   ├── 06_ieeg/
+│   ├── 07_supplementary_robustness/
 │   ├── common.R
 │   ├── config.py
 │   ├── run.R
@@ -38,11 +39,12 @@ The numbered modules identify the same analyses across the repository. Each modu
 | Module | Analysis | Main outputs |
 |---|---|---|
 | `01_temporal_binding_effect` | Quantify baseline-corrected perceptual shifts and compare voluntary and involuntary outcome binding | Signed-rank tests and behavioural plots |
-| `02_meg_results` | Display regional MEG amplitude time courses across conditions | Mean and standard-error plots for 12 regions |
+| `02_meg_results` | Paired MEG permutation tests and regional time-course plots | Original Brainstorm script/statistical maps and mean/standard-error plots for 12 regions |
 | `03_functional_regression` | Relate participant-level binding contrasts to MEG time courses using sparse functional regression | Selected regional coefficients and time windows |
 | `04_network` | Estimate directed interactions using PCMCI–GPDC | Lagged-link estimates and action/outcome network plots |
 | `05_LMM` | Extract trial-wise neural features, characterize phase distributions and fit mixed-effects models | Fixed-effect estimates, mean-amplitude panels and four-band ITPC plots |
 | `06_ieeg` | Characterize behavioural and neural measures in intracranial MTG recordings | Patient summaries and behavioural/ITPC plots |
+| `07_supplementary_robustness` | Bayesian behavioural robustness and participant-level ITPC slope comparisons | JZS Bayes factors and paired-bootstrap confidence intervals |
 
 See [analysis/README.md](analysis/README.md) for the scripts, execution order and analysis settings in each module.
 
@@ -68,6 +70,7 @@ Rscript analysis/run.R coefficients
 Rscript analysis/run.R amplitude
 python analysis/06_ieeg/01_features_itpc.py
 Rscript analysis/run.R ieeg
+Rscript --vanilla analysis/run.R robustness
 ```
 
 Run the phase-plot entry points in MATLAB:
@@ -85,6 +88,14 @@ The R commands execute the report code and save the corresponding tables and fig
 Rscript analysis/run.R behavior --html
 ```
 
+### MEG permutation tests and large source-map files
+
+The original Brainstorm permutation export is available as [`a01_permutation_tests.m`](analysis/02_meg_results/a01_permutation_tests.m). Its 76 source-map inputs and two saved statistical maps are organized separately from the Fig. 2 plotting summaries. The large archives are prepared as GitHub Release assets, while their file inventories, pairing list and instructions are tracked in the repository. See [the MEG module](analysis/02_meg_results/README.md) for the Brainstorm setup, [data layout](data/02_meg_results/meg/README.md) and [saved results](results/02_meg_results/README.md). The existing `meg` R command redraws the time-course figure; it does not rerun the permutation calculation.
+
+### Supplementary robustness analyses
+
+Run `Rscript --vanilla analysis/run.R robustness` to reproduce the JZS Bayesian t tests and the participant-level ITPC slope comparisons. This step needs only base R and the supplied inputs. It reuses the original behavioural participant summary, fits each ITPC regression with an intercept, and retains both conditions together in 20,000 participant bootstrap draws. Results are saved in `results/07_supplementary_robustness/`, including a three-decimal summary. See [the supplementary module](analysis/07_supplementary_robustness/README.md) for the inputs, settings and optional input-preparation script.
+
 ### Redrawing supplied results
 
 Use the supplied tables and cached features to redraw the figures. Run the `coefficients`, `amplitude` or `ieeg` R step, or either MATLAB phase-plot entry point, to redraw those figures. To redraw the networks, use:
@@ -101,7 +112,7 @@ The functional-regression report also identifies the setup and plotting chunks n
 |---|---|---|
 | R 4.4.3 | Behavioural tests, functional regression, LMMs and plotting | `renv.lock`, including glmnet 4.1-10 |
 | Python | Time-frequency features, ITPC and PCMCI–GPDC | Module-specific `requirements.txt` files |
-| MATLAB | MEG and intracranial phase-distribution figures | MATLAB entry points in `05_LMM` and `06_ieeg` |
+| MATLAB | Original Brainstorm MEG permutation export and phase-distribution figures | Brainstorm for `02_meg_results`; plotting entry points in `05_LMM` and `06_ieeg` |
 
 The network module uses Tigramite; neural feature extraction uses MNE. Python dependencies are listed in the [network](analysis/04_network/requirements.txt), [MEG feature](analysis/05_LMM/requirements.txt) and [intracranial feature](analysis/06_ieeg/requirements.txt) requirements files. Pandoc is used for optional HTML rendering.
 
@@ -109,7 +120,7 @@ The network module uses Tigramite; neural feature extraction uses MNE. Python de
 
 **Data.** The inputs are preprocessed regional MEG time courses, single-trial epochs, behavioural responses and intracranial bipolar-channel recordings. MEG and behavioural inputs include participants 2–20; intracranial analyses use patients 2 and 4. Dataset fields, condition codes and baseline corrections are documented in [data/README.md](data/README.md).
 
-**Results.** The repository retains the final behavioural tests, functional-regression coefficients, network links, LMM fixed effects and intracranial patient summaries. File contents and column definitions are documented in [results/README.md](results/README.md).
+**Results.** The repository retains the final behavioural tests, functional-regression coefficients, network links, LMM fixed effects, intracranial patient summaries and supplementary Bayes factors/ITPC bootstrap intervals. File contents and column definitions are documented in [results/README.md](results/README.md).
 
 **Figures.** Each figure category is exported as one combined PDF in its numbered module folder. The single-trial module provides mean-amplitude, LMM-coefficient and ITPC figures. Its ITPC figure shows PreSMA-L, PreCG-R and MTG-R, each with Delta, Theta, Alpha and Beta.
 

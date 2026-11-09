@@ -6,3 +6,10 @@ analysis/.cache/*
 !analysis/.cache/derived/
 __pycache__/
 *.pyc
+
+# Large Fig. 2 source maps and saved maps are distributed as Release assets.
+/data/02_meg_results/meg/*.7z
+/data/02_meg_results/meg/*.mat
+/analysis/02_meg_results/*.7z
+/results/02_meg_results/*.7z
+/results/02_meg_results/*.mat

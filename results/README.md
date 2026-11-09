@@ -9,11 +9,15 @@ This directory contains the final numerical tables produced by the analysis work
 | `01_temporal_binding_effect` | `normality.csv` | Shapiro–Wilk tests for the four binding conditions and the paired outcome difference |
 | `01_temporal_binding_effect` | `against_zero.csv` | Exact one-sided signed-rank tests of perceptual shifts against zero |
 | `01_temporal_binding_effect` | `outcome_paired.csv` | Exact one-sided paired comparison of voluntary and involuntary outcome binding |
+| `02_meg_results` | `permutation_results.7z` (Release asset) | Original Brainstorm permutation export and two saved source-level p/t maps |
 | `03_functional_regression` | `action_binding.csv` | Selected functional-regression coefficients and analysis windows for action binding |
 | `03_functional_regression` | `outcome_binding.csv` | Selected functional-regression coefficients and analysis windows for outcome binding |
 | `04_network` | `all_links.csv` | GPDC estimates, p-values and lag information for the tested links |
 | `05_LMM` | `fixed_effects.csv` | Voluntary screening-model coefficients and involuntary follow-up coefficients for the selected regions |
 | `06_ieeg` | `patient_summary.csv` | Patient-specific trial counts, behavioural summaries and ITPC values |
+| `07_supplementary_robustness` | `bayesian_t_tests.csv` | JZS Bayesian one-sample and paired t tests for behavioural shifts |
+| `07_supplementary_robustness` | `itpc_bootstrap.csv` | Condition-specific participant ITPC slopes and paired-bootstrap differences/intervals |
+| `07_supplementary_robustness` | `RESULTS.md` | Three-decimal summary of both supplementary analyses |
 
 ## Behavioural tests
 
@@ -46,3 +50,13 @@ The table contains voluntary-condition estimates for all retained regions, follo
 `subject`, `label` and `condition` identify the patient, bipolar channel and condition. `n_trials` gives the matched trial count; `behavior_mean` and `behavior_sd` summarize perceptual shifts in milliseconds. The four `*_bandITPC` columns give ITPC within each patient and condition.
 
 Intermediate trial features, phase angles, network matrices and window-matching metadata are stored in `analysis/.cache/derived`. Figures are saved under `figures/`. Running an analysis updates its corresponding outputs.
+
+## Supplementary robustness results
+
+In `bayesian_t_tests.csv`, `BF10` compares the two-sided JZS alternative with zero; `BF_positive0` and `BF_negative0` use the corresponding truncated and renormalized priors. `prior_cauchy_scale` is sqrt(2)/2. The paired outcome row is voluntary minus involuntary.
+
+In `itpc_bootstrap.csv`, each condition has a separate participant-level OLS fit with an intercept. `difference_ms_per_unit_ITPC` is the voluntary slope minus the involuntary slope. `ci_low` and `ci_high` are the 95% percentile limits from 20,000 paired participant draws. `bootstrap_p` retains the approximate two-sided zero-crossing tail calculation, with a plus-one correction. The CSV files retain numerical precision; `RESULTS.md` formats continuous statistics to three decimal places.
+
+## MEG permutation results
+
+The original action/outcome maps and their archive members are described in [`02_meg_results/README.md`](02_meg_results/README.md). The saved `pmap` and `tmap` arrays are retained as supplied; Brainstorm statistical display/FDR thresholding is a separate setting. The binary archive is prepared for a GitHub Release rather than an ordinary repository file.
