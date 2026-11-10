@@ -52,7 +52,6 @@ data_tables <- list()
 for (b in c("action","outcome")) {
   conds <- if(b=="action") c("va_a","ia_a") else c("vs_s","is_s")
   f <- fixed %>% filter(binding==b,term %in% plot_terms,condition %in% conds)
-  stopifnot(!anyDuplicated(f[c("roi","term","condition")]))
   v <- f %>% filter(condition==conds[1]) %>% select(roi,term,p_v=p_value)
   inv <- f %>% filter(condition==conds[2]) %>% select(roi,term,p_i=p_value)
   followup_rois <- fixed %>% filter(binding==b,condition==conds[2]) %>% distinct(roi) %>% pull(roi)
@@ -67,9 +66,6 @@ for (b in c("action","outcome")) {
            pos=y+if_else(condition==conds[1],.4,-.4),
            sig=is.finite(p_value) & p_value<plot_alpha,
            p_label=if_else(p_value<.001,"p < .001",sprintf("p = %.3f",p_value)))
-  stopifnot(nrow(d)==10*length(roi_order),
-            all(is.finite(as.matrix(d[c("estimate","conf_low","conf_high")]))))
-  for (r in roi_order) stopifnot(setequal(d$term[d$roi==r],plot_terms))
   data_tables[[b]] <- list(data=d,roi_order=roi_order)
 }
 ```

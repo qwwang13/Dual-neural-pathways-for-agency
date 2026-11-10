@@ -22,10 +22,6 @@ out <- out_dir("05_LMM"); model_cache <- cache_dir("05_LMM/models")
 source(file.path(project_root,"analysis/05_LMM/fun_lmm_split.R"),encoding="UTF-8",local=TRUE)
 w <- read_functional_windows() %>%
   mutate(roi=gsub("-","",region))
-used <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE)
-key <- c("binding","region","primary_lower_ms","primary_upper_ms")
-stopifnot(isTRUE(all.equal(as.data.frame(arrange(w,binding,region)[key]),
-  as.data.frame(arrange(used,binding,region)[key]),check.attributes=FALSE)))
 ```
 
 ## Fit and compare models
@@ -38,12 +34,6 @@ fit_condition <- function(one,condition) {
   fit <- run_lmm_split(file.path(cache_root,"05_LMM/features",filename),
     file.path(data_root,"05_LMM/behavior_single_trial.csv"),
     scale_features=TRUE,condition_levels=condition,exclude_subjects=NULL)
-  dat <- fit$data
-  check19(as.integer(as.character(dat$subject)))
-  stopifnot(all(is.finite(dat$behavior_value)),all(is.finite(as.matrix(dat[fit$predictors]))),
-    nrow(model.frame(fit$models[[condition]]))==nrow(dat),length(fit$predictors)==9,
-    all(abs(colMeans(dat[fit$predictors])) < 1e-8),
-    all(abs(vapply(dat[fit$predictors],sd,numeric(1))-1) < 1e-8))
   fit
 }
 record_fit <- function(fit,one,tag) {

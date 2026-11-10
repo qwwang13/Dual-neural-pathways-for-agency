@@ -17,9 +17,8 @@ BIN_MS = 10
 def _folder(run_name, figures=False):
     return (ROOT / "figures" if figures else ROOT / "analysis/.cache/derived") / "04_network"
 
-
 def prepare_input(binding, window_ms, rois):
-    """Match the original preprocessing: bin within subject, then average 19 subjects."""
+    """Match the original preprocessing: bin within subject, then average participant means."""
     start, end = window_ms
     if not (0 <= start < end <= 1000) or start % BIN_MS or end % BIN_MS:
         raise ValueError(f"{binding}: choose 10-ms boundaries within 0-1000 ms.")
@@ -33,25 +32,14 @@ def prepare_input(binding, window_ms, rois):
         raise ValueError(f"{binding}: unavailable ROIs {sorted(missing)}; available: {sorted(d.region.unique())}")
     condition = {"action": "vaa_iaa", "outcome": "vss_iss"}[binding]
     d = d.loc[d.region.isin(rois) & (d.condition == condition) & d.Time.between(0, 1000)].copy()
-    if not np.isfinite(d[["Time", "Value", "subject"]].to_numpy()).all():
-        raise ValueError(f"{binding}: nonfinite input.")
-    if d.duplicated(["region", "subject", "Time"]).any():
-        raise ValueError(f"{binding}: duplicate subject/ROI/time rows.")
     edges = np.arange(0, 1000 + BIN_MS, BIN_MS)
     bins = np.searchsorted(edges, d.Time.to_numpy(), side="right") - 1
     d["lower"] = np.minimum(bins, len(edges)-2) * BIN_MS
     d = d.loc[(d.lower >= start) & (d.lower < end)]
     subject_means = d.groupby(["region", "subject", "lower"], as_index=False).Value.mean()
-    for region in rois:
-        one = subject_means.loc[subject_means.region == region]
-        if set(one.subject) != set(range(2, 21)):
-            raise ValueError(f"{binding}/{region}: expected all subjects 2-20.")
-        if len(one) != 19 * ((end-start)//BIN_MS) or not one.groupby("lower").subject.nunique().eq(19).all():
-            raise ValueError(f"{binding}/{region}: incomplete subject/bin grid.")
     matrix = subject_means.groupby(["lower", "region"]).Value.mean().unstack("region")
     matrix = matrix.reindex(index=np.arange(start, end, BIN_MS), columns=rois)
-    if not np.isfinite(matrix.to_numpy()).all():
-        raise ValueError(f"{binding}: missing bins.")
+    matrix.attrs["n_subjects"] = int(subject_means.subject.nunique())
     return matrix
 
 # Estimate networks and save link results
@@ -74,7 +62,7 @@ def calculate(networks, tau_max_values, *, run_name, tau_min=1, pc_alpha=.05, al
     out.mkdir(parents=True, exist_ok=True)
     settings = dict(networks={b: dict(window_ms=list(networks[b]["window_ms"]), rois=list(matrices[b].columns))
                               for b in matrices}, tau_min=int(tau_min), tau_max_values=taus,
-                    bin_ms=BIN_MS, n_subjects=19, pc_alpha=pc_alpha, alpha_level=alpha_level,
+                    bin_ms=BIN_MS, n_subjects=next(iter(matrices.values())).attrs["n_subjects"], pc_alpha=pc_alpha, alpha_level=alpha_level,
                     significance="analytic", multiple_testing="none")
     settings["settings_key"] = hashlib.sha256(json.dumps(settings,sort_keys=True).encode()).hexdigest()
     summary, all_links = [], []

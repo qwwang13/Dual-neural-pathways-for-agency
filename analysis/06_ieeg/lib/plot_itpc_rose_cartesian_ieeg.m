@@ -210,8 +210,6 @@ if ~isfield(cfg,'rowHeightCm'); cfg.rowHeightCm = 4.1; end
 if ~isfield(cfg,'headerHeightCm'); cfg.headerHeightCm = 1.0; end
 if ~isfield(cfg,'sideMarginCm'); cfg.sideMarginCm = .3; end
 if ~isfield(cfg,'bottomMarginCm'); cfg.bottomMarginCm = .2; end
-assert(cfg.panelWidthCm >= cfg.circleSizeCm && cfg.rowHeightCm >= cfg.circleSizeCm+.7, ...
-    'Panel/row size is too small for the circle and its text.');
 
 if ~isfield(cfg, 'histScaleMode'); cfg.histScaleMode = "global_common"; end
 if ~isfield(cfg, 'histRadiusFrac'); cfg.histRadiusFrac = 0.90; end

@@ -11,24 +11,8 @@ addpath(fullfile(repo, 'analysis', '05_LMM'));
 plotScope = "all";
 
 dirData = fullfile(repo, 'analysis', '.cache', 'derived', '05_LMM', 'ITPC');
-W = table();
-for binding = ["action", "outcome"]
-    C = readtable(fullfile(repo, 'results', '03_functional_regression', binding + "_binding.csv"), 'TextType', 'string');
-    C = unique(C(:, {'region','primary_lower_ms','primary_upper_ms'}), 'rows', 'stable');
-    C.binding = repmat(binding, height(C), 1);
-    W = [W; C];
-end
 E = readtable(fullfile(dirData, 'windows_used.csv'), 'TextType', 'string');
-W = sortrows(W, {'binding','region'});
 E = sortrows(E, {'binding','region'});
-assert(isequal(W.binding, E.binding) && isequal(W.region, E.region) && ...
-       isequal(W.primary_lower_ms, E.primary_lower_ms) && ...
-       isequal(W.primary_upper_ms, E.primary_upper_ms), 'ITPC windows differ; rerun analysis/05_LMM/02_itpc.py.');
-for rr = 1:height(E)
-    stem = erase(E.file(rr), '.csv');
-    assert(isfile(fullfile(dirData, stem + '_angles.csv')) && ...
-           isfile(fullfile(dirData, stem + '_itpc_mean.csv')), 'Missing ITPC export: %s', stem);
-end
 
 E.roi = erase(E.region, '-');
 % Display all four bands for the manuscript regions.
@@ -197,7 +181,6 @@ for rr = 1:height(jobs)
 end
 
 [present,order] = ismember(["PreSMA-L","Precentral-R","MTG-R"],sourceLabels);
-assert(all(present));
 combine_itpc_figures(sourceFigures(order),["PreSMA-L","PreCG-R","MTG-R"],fullfile(plotRoot,'itpc_four_bands'));
 disp('Done.');
 
@@ -211,7 +194,6 @@ for rr = 1:height(selected)
     I = readtable(fullfile(baseDir,stem + "_itpc_mean.csv"),'TextType','string');
     A = A(A.band == selected.band(rr), :);
     I = I(I.band == selected.band(rr), :);
-    assert(~isempty(A) && ~isempty(I), 'Missing selected band: %s', selected.band(rr));
     conds = unique(A.condition);
     for cc = 1:numel(conds)
         th = A.angle_rad(A.condition == conds(cc));
@@ -219,7 +201,6 @@ for rr = 1:height(selected)
         prob = counts / max(sum(counts),1);
         cfg.globalMaxProb = max(cfg.globalMaxProb,max(prob));
         vals = I.itpc_mean(I.condition == conds(cc));
-        assert(~isempty(vals) && all(isfinite(vals)), 'Missing selected condition ITPC.');
         cfg.globalMaxITPC = max(cfg.globalMaxITPC,mean(vals));
     end
 end

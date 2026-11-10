@@ -17,7 +17,6 @@ This directory contains the final numerical tables produced by the analysis work
 | `06_ieeg` | `patient_summary.csv` | Patient-specific trial counts, behavioural summaries and ITPC values |
 | `07_supplementary_robustness` | `bayesian_t_tests.csv` | JZS Bayesian one-sample and paired t tests for behavioural shifts |
 | `07_supplementary_robustness` | `itpc_bootstrap.csv` | Condition-specific participant ITPC slopes and paired-bootstrap differences/intervals |
-| `07_supplementary_robustness` | `RESULTS.md` | Three-decimal summary of both supplementary analyses |
 
 ## Behavioural tests
 
@@ -55,7 +54,7 @@ Intermediate trial features, phase angles, network matrices and window-matching 
 
 In `bayesian_t_tests.csv`, `BF10` compares the two-sided JZS alternative with zero; `BF_positive0` and `BF_negative0` use the corresponding truncated and renormalized priors. `prior_cauchy_scale` is sqrt(2)/2. The paired outcome row is voluntary minus involuntary.
 
-In `itpc_bootstrap.csv`, each condition has a separate participant-level OLS fit with an intercept. `difference_ms_per_unit_ITPC` is the voluntary slope minus the involuntary slope. `ci_low` and `ci_high` are the 95% percentile limits from 20,000 paired participant draws. `bootstrap_p` retains the approximate two-sided zero-crossing tail calculation, with a plus-one correction. The CSV files retain numerical precision; `RESULTS.md` formats continuous statistics to three decimal places.
+In `itpc_bootstrap.csv`, each condition has a separate participant-level OLS fit with an intercept. `difference_ms_per_unit_ITPC` is the voluntary slope minus the involuntary slope. `ci_low` and `ci_high` are the 95% percentile limits from 20,000 paired participant draws. `bootstrap_p` retains the approximate two-sided zero-crossing tail calculation, with a plus-one correction. The CSV files retain numerical precision; the R Markdown report displays continuous statistics to three decimal places.
 
 ## MEG permutation results
 

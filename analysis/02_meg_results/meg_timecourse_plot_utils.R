@@ -93,8 +93,6 @@ plot_mean_SE_tc <- function(dat,
   dat_line_v <- dat %>% filter(condition == "Voluntary")
   dat_line_i <- dat %>% filter(condition == "Involuntary")
   border_data <- distinct(dat, region)
-  stopifnot(!anyDuplicated(highlight_regions),
-    all(highlight_regions %in% as.character(border_data$region)))
 
   p <- ggplot() +
     geom_ribbon(

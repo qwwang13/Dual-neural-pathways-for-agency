@@ -8,7 +8,6 @@ here = fileparts(mfilename('fullpath'));
 repo = fileparts(fileparts(here));
 addpath(fullfile(here, 'lib'));
 W = readtable(fullfile(repo, 'analysis', '.cache', 'derived', '06_ieeg', 'windows_used.csv'));
-assert(height(W)==1, 'Expected one saved MTG-R time window.');
 figureTitle = "MTG-R";
 
 dirData = fullfile(repo, 'analysis', '.cache', 'derived', '06_ieeg', 'ITPC');

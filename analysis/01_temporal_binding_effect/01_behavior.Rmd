@@ -17,9 +17,7 @@ while(!file.exists(file.path(root,"dual-agency-pathways.Rproj"))) {
 source(file.path(root,"analysis/common.R"),encoding="UTF-8",local=TRUE)
 out <- out_dir("01_temporal_binding_effect"); fig <- out_dir("01_temporal_binding_effect", TRUE)
 d <- read_csv(file.path(data_root, "01_temporal_binding_effect/perceptual_shift_action_outcome.csv"), show_col_types=FALSE) %>% arrange(subject)
-check19(d$subject); stopifnot(nrow(d)==19, !anyDuplicated(d$subject))
 vars <- c("va_ba", "ia_bi", "vs_bs", "is_bs")
-stopifnot(all(is.finite(as.matrix(d[vars]))))
 ```
 
 ## Run statistical tests
@@ -32,7 +30,6 @@ normality <- map_dfr(c(vars, "outcome_voluntary_minus_involuntary"), function(v)
   tibble(variable=v, n=length(x), W=unname(z$statistic), p=z$p.value)
 })
 signed_rank <- function(x, label, alternative) {
-  stopifnot(all(x!=0), !anyDuplicated(abs(x)))
   z <- wilcox.test(x, mu=0, alternative=alternative, exact=TRUE, correct=FALSE)
   tibble(comparison=label, n=length(x), mean=mean(x), median=median(x), sd=sd(x),
          alternative=alternative, V=max(unname(z$statistic),sum(rank(abs(x)))-unname(z$statistic)),

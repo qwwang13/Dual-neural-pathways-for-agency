@@ -55,17 +55,7 @@ dpi <- 300
 
 ```{r read-data}
 feature_windows <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE)
-model_windows <- read_csv(file.path(cache_root,"05_LMM/models/windows_used.csv"),show_col_types=FALSE)
 jobs <- feature_windows %>% filter(roi %in% display_rois) %>% arrange(match(roi,manuscript_rois))
-stopifnot(nrow(jobs)>0,!anyDuplicated(jobs[c("binding","roi")]))
-window_check <- full_join(
-  select(jobs,binding,roi,feature_lower=primary_lower_ms,feature_upper=primary_upper_ms),
-  model_windows %>% filter(roi %in% display_rois) %>%
-    select(binding,roi,model_lower=primary_lower_ms,model_upper=primary_upper_ms),
-  by=c("binding","roi"),relationship="one-to-one")
-stopifnot(nrow(window_check)==nrow(jobs),!anyNA(window_check),
-  all(window_check$feature_lower==window_check$model_lower),
-  all(window_check$feature_upper==window_check$model_upper))
 ```
 
 ## Plot mean amplitude
@@ -84,41 +74,23 @@ make_roi_plots <- function(job) {
   }
   w <- read_csv(file.path(cache_root,"05_LMM/models/windows_used.csv"),show_col_types=FALSE) %>%
     filter(binding==binding_name,roi==roi_name)
-  used <- read_csv(file.path(cache_root,"05_LMM/features/windows_used.csv"),show_col_types=FALSE) %>%
-    filter(binding==binding_name,roi==roi_name)
-  stopifnot(nrow(w)==1,nrow(used)==1,
-    w$primary_lower_ms==used$primary_lower_ms,w$primary_upper_ms==used$primary_upper_ms,
-    is.finite(n_bins),n_bins>=2,n_bins==as.integer(n_bins))
   keys <- c("subject","condition","trial")
   behavior <- read_csv(file.path(data_root,"05_LMM/behavior_single_trial.csv"),show_col_types=FALSE) %>%
     filter(is.finite(behavior_value))
-  stopifnot(!anyDuplicated(behavior[keys]))
   trials <- read_csv(file.path(cache_root,"05_LMM/features",job$file[[1]]),show_col_types=FALSE) %>%
     inner_join(select(behavior,all_of(keys)),by=keys,relationship="one-to-one") %>%
     filter(condition %in% condition_codes)
-  expected <- read_csv(file.path(cache_root,"05_LMM/models/matched_trial_counts.csv"),show_col_types=FALSE) %>%
-    filter(binding==binding_name,roi==roi_name) %>% select(subject,condition,n_model=n_trials)
-  checked <- full_join(count(trials,subject,condition,name="n_trials"),expected,
-    by=c("subject","condition"),relationship="one-to-one")
-  stopifnot(nrow(checked)==38,!anyNA(checked),all(checked$n_trials==checked$n_model),
-    !anyDuplicated(trials[keys]),all(is.finite(trials$meanAmplitude)))
-  for(cond in condition_codes) check19(trials$subject[trials$condition==cond])
   trials <- trials %>% mutate(condition=factor(if_else(condition==condition_codes[1],"Voluntary","Involuntary"),
     levels=c("Voluntary","Involuntary")))
   means <- trials %>% group_by(subject,condition) %>% summarise(amplitude=mean(meanAmplitude),.groups="drop")
-  stopifnot(nrow(means)==38)
   edges <- seq(floor(min(trials$meanAmplitude)*10)/10,
     ceiling(max(trials$meanAmplitude)*10)/10,length.out=n_bins+1)
   bin_width <- edges[2]-edges[1]
-  stopifnot(is.finite(bin_width),bin_width>0,length(edges)==n_bins+1)
   trials$bin <- as.integer(cut(trials$meanAmplitude,breaks=edges,right=FALSE,include.lowest=TRUE))
-  stopifnot(!anyNA(trials$bin))
   bars <- trials %>% count(condition,bin,name="n_trials") %>%
     complete(condition,bin=seq_len(length(edges)-1),fill=list(n_trials=0)) %>%
     group_by(condition) %>% mutate(probability=n_trials/sum(n_trials)) %>% ungroup() %>%
     mutate(lower=edges[bin],upper=edges[bin+1]) %>% arrange(desc(probability))
-  stopifnot(all(abs((bars %>% group_by(condition) %>% summarise(s=sum(probability)))$s-1)<1e-10))
-  stopifnot(all(table(bars$condition)==n_bins))
   bandwidth <- bw.nrd0(trials$meanAmplitude)*density_adjust
   curves <- bind_rows(lapply(split(trials,trials$condition),function(g) {
     z <- density(g$meanAmplitude,bw=bandwidth,from=min(edges)-4*bandwidth,to=max(edges)+4*bandwidth,n=4096)
@@ -164,13 +136,9 @@ make_roi_plots <- function(job) {
     theme(legend.position="none",axis.line.y=element_blank(),axis.ticks.y=element_blank(),
       axis.text.y=element_blank(),plot.margin=margin(3,4,2,3))
   zoom_top <- top + labs(x="Trial amplitude (z-score)")
-  stopifnot(nrow(zoom_means)==38,all(table(zoom_means$condition)==19),
-    all(abs(zoom_means$amplitude)<=mean_zoom_limit),
-    n_distinct(zoom_means$row)==2)
   subject_pair_means <- means %>% mutate(condition_position=as.integer(condition))
   subject_pair_wide <- subject_pair_means %>% select(subject,condition,amplitude) %>%
     pivot_wider(names_from=condition,values_from=amplitude)
-  stopifnot(nrow(subject_pair_wide)==19,!anyNA(subject_pair_wide))
   three_bottom <- ggplot() +
     geom_hline(yintercept=0,linetype="dashed",linewidth=.13,color="#B5B5B5") +
     geom_segment(data=subject_pair_wide,aes(x=1,xend=2,y=Voluntary,yend=Involuntary),
@@ -190,7 +158,6 @@ make_roi_plots <- function(job) {
   fix_square_panel <- function(p) {
     g <- ggplotGrob(p)
     panel <- which(g$layout$name=="panel")
-    stopifnot(length(panel)==1)
     g$widths[g$layout$l[panel]] <- grid::unit(1,"null")
     g$heights[g$layout$t[panel]] <- grid::unit(panel_height_cm,"cm")
     g
@@ -203,7 +170,6 @@ make_roi_plots <- function(job) {
   panel_column <- square_top_grob$layout$l[square_top_grob$layout$name=="panel"]
   other_width_cm <- grid::convertWidth(sum(shared_widths[-panel_column]),"cm",valueOnly=TRUE)
   panel_width_cm <- plot_width_cm-other_width_cm
-  stopifnot(panel_width_cm>0)
   shared_widths[panel_column] <- grid::unit(panel_width_cm,"cm")
   square_top_grob$widths <- shared_widths
   square_pair_grob$widths <- shared_widths

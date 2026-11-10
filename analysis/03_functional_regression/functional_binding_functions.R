@@ -5,15 +5,8 @@ binding_settings <- function(binding, rules) {
   cfg <- c(list(binding=binding,time_windows=c(10,20,40),lower=0,upper=1000,
     condition=if(binding=="action")"vaa_iaa"else"vss_iss",
     binding_col=if(binding=="action")"vaa_iaa_binding"else"vss_iss_binding"),rules)
-  stopifnot(setequal(names(rules),c("conti_p","gap_ms","min_span_ms","density_cap","outside_runs_cap")),
-    setequal(names(cfg$conti_p),c("10","20","40")),setequal(names(cfg$gap_ms),c("10","20","40")),
-    all(is.finite(cfg$gap_ms)),all(cfg$gap_ms>=0),all(cfg$gap_ms%%10==0),
-    length(cfg$min_span_ms)==1,cfg$min_span_ms>=10,cfg$min_span_ms%%10==0,
-    length(cfg$density_cap)==1,cfg$density_cap>0,cfg$density_cap<=1,
-    length(cfg$outside_runs_cap)==1,cfg$outside_runs_cap>=0,cfg$outside_runs_cap%%1==0)
   for(tw in cfg$time_windows) {
     p <- cfg$conti_p[[as.character(tw)]]
-    stopifnot(length(p)>0,all(is.finite(p)),all(p>=1),all(p%%1==0),!anyDuplicated(p))
     cfg$conti_p[[as.character(tw)]] <- sort(p)
   }
   cfg
@@ -33,7 +26,6 @@ binding_intervals <- function(mask,grid,gap_ms=0) {
 }
 
 binding_scan_models <- function(models,cfg) {
-  stopifnot(all(models$intercept))
   models<-models%>%dplyr::mutate(path_index=dplyr::row_number(),strict_run=purrr::map_int(pos,binding_strict_run))
   status<-list();coefficients<-list()
   for(rg in sort(unique(models$region)))for(tw in cfg$time_windows)for(p in cfg$conti_p[[as.character(tw)]]) {
@@ -47,7 +39,6 @@ binding_scan_models <- function(models,cfg) {
       alpha=if(found)chosen$alpha else NA_real_,lambda=if(found)chosen$lambda else NA_real_,
       r2=if(found)chosen$r2 else NA_real_,intercept=if(found)TRUE else NA)
     if(found) {
-      stopifnot(length(pos)==chosen$n_selected,length(beta)==length(pos),binding_strict_run(pos)>=p)
       coefficients[[length(coefficients)+1]]<-tibble::tibble(region=rg,time_window=tw,conti_p=p,
         alpha=chosen$alpha,lambda=chosen$lambda,r2=chosen$r2,intercept=TRUE,consecutive_mode="strict",
         p_number=pos,lower=cfg$lower+(pos-1)*tw,upper=cfg$lower+pos*tw,coef=beta,

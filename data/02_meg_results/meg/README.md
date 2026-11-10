@@ -4,7 +4,7 @@
 
 `1.7z` through `15.7z` contain the 76 source-map MAT files referenced by the supplied Brainstorm script. There are 19 maps per condition: `vab` and `iab` for the action comparison, and `vsb` and `isb` for the outcome comparison. Original archive and MAT filenames are retained.
 
-`archives.csv` lists archive sizes, member counts and SHA256 hashes. The archives total 12,579,638,717 bytes (approximately 12.58 GB). `input_pairs.csv` records the exact two ordered input lists for each paired test, including the archive containing each file. `pair_index` is the row position in the original paired lists, rather than a participant identifier inferred from the timestamp in a filename.
+The archives total 12,579,638,717 bytes (approximately 12.58 GB). `input_pairs.csv` records the exact two ordered input lists for each paired test, including the archive containing each file. `pair_index` is the row position in the original paired lists, rather than a participant identifier inferred from the timestamp in a filename.
 
 ## Large-file distribution
 

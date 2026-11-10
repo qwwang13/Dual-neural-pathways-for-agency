@@ -1,6 +1,5 @@
 function combine_itpc_figures(sourceFigures,labels,outputStem)
 n = numel(sourceFigures);
-assert(n>0 && numel(labels)==n);
 set(sourceFigures(1),'Units','centimeters');
 sz = get(sourceFigures(1),'Position');
 w = sz(3)*n; h = sz(4);

@@ -1,0 +1,81 @@
+---
+title: "Supplementary robustness analyses"
+output: html_document
+---
+
+## Bayesian behavioural analysis
+
+Default JZS Bayesian t tests assess the participant binding measures against zero and the voluntary-minus-involuntary outcome difference.
+
+```{r bayesian-read-data, message=FALSE}
+bayes_root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(bayes_root, "dual-agency-pathways.Rproj"))) {
+  parent <- dirname(bayes_root)
+  if(identical(parent, bayes_root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  bayes_root <- parent
+}
+source(file.path(bayes_root,
+  "analysis/07_supplementary_robustness/lib/bayesian_functions.R"),
+  local=TRUE, encoding="UTF-8")
+# Read the original participant-level behavioural summary.
+bayes_file <- file.path(bayes_root,
+  "data/01_temporal_binding_effect/perceptual_shift_action_outcome.csv")
+bayes_behavior <- read.csv(bayes_file, check.names=FALSE)
+bayes_behavior <- bayes_behavior[order(bayes_behavior$subject), ]
+```
+
+```{r bayesian-tests}
+bayes <- run_bayesian_tests(bayes_behavior)
+```
+
+```{r bayesian-save-results}
+bayes_out <- file.path(bayes_root, "results/07_supplementary_robustness")
+dir.create(bayes_out, recursive=TRUE, showWarnings=FALSE)
+write.csv(bayes, file.path(bayes_out, "bayesian_t_tests.csv"), row.names=FALSE)
+knitr::kable(bayes[c("comparison", "BF10", "BF_positive0", "BF_negative0")], digits=3)
+```
+
+## Participant-level ITPC bootstrap
+
+Separate ITPC regressions include an intercept in each condition. The bootstrap samples participants with both conditions together and compares the voluntary and involuntary slopes.
+
+```{r itpc-read-data, message=FALSE}
+itpc_root <- Sys.getenv("DUAL_AGENCY_ROOT", unset=getwd())
+while(!file.exists(file.path(itpc_root, "dual-agency-pathways.Rproj"))) {
+  parent <- dirname(itpc_root)
+  if(identical(parent, itpc_root)) stop("Open the project or set DUAL_AGENCY_ROOT.")
+  itpc_root <- parent
+}
+itpc_module <- file.path(itpc_root, "analysis/07_supplementary_robustness")
+source(file.path(itpc_module, "lib/itpc_functions.R"), local=TRUE, encoding="UTF-8")
+# Read the original participant means and existing trial-derived feature tables.
+itpc_behavior <- read.csv(file.path(itpc_root,
+  "data/01_temporal_binding_effect/perceptual_shift_action_outcome.csv"),
+  check.names=FALSE)
+itpc_feature_dir <- file.path(itpc_root, "analysis/.cache/derived/05_LMM/features")
+itpc_features <- list(
+  PreSMAL=read.csv(file.path(itpc_feature_dir, "PreSMAL_action_ba.csv"),
+                  stringsAsFactors=FALSE),
+  PrecentralR=read.csv(file.path(itpc_feature_dir, "PrecentralR_outcome_bs.csv"),
+                      stringsAsFactors=FALSE),
+  MTGR=read.csv(file.path(itpc_feature_dir, "MTGR_outcome_bs.csv"),
+               stringsAsFactors=FALSE)
+)
+itpc_inputs <- prepare_itpc_inputs(itpc_behavior, itpc_features)
+```
+
+```{r itpc-bootstrap}
+draws <- paired_bootstrap_draws(
+  generator=file.path(itpc_module, "lib/bootstrap_draws.py"),
+  n=nrow(itpc_inputs$behavior), replicates=20000L, seed=20261109L
+)
+bootstrap <- run_itpc_bootstrap(itpc_inputs, draws)
+```
+
+```{r itpc-save-results}
+itpc_out <- file.path(itpc_root, "results/07_supplementary_robustness")
+dir.create(itpc_out, recursive=TRUE, showWarnings=FALSE)
+write.csv(bootstrap, file.path(itpc_out, "itpc_bootstrap.csv"), row.names=FALSE)
+knitr::kable(bootstrap[c("roi", "band", "difference_ms_per_unit_ITPC",
+                         "ci_low", "ci_high", "bootstrap_p")], digits=3)
+```

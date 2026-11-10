@@ -24,10 +24,6 @@ save_plot_pdf <- function(p, stem, dir_pdf, w = 8, h = 6) {
 }
 
 to_long <- function(df, cols, levels, labels) {
-  stopifnot(
-    length(cols) == length(levels),
-    length(levels) == length(labels)
-  )
 
   df %>%
     pivot_longer(

@@ -49,6 +49,8 @@ Networks use 10 ms bins, lags 1–7, PC alpha = 0.05 and link alpha = 0.05. Acti
 | [`05_amplitude.Rmd`](05_LMM/05_amplitude.Rmd) | Plot pooled-trial amplitude distributions and paired participant means |
 | [`plot_itpc.m`](05_LMM/plot_itpc.m) | Draw the four-band phase distributions in MATLAB |
 
+`01_features.py` reads the preprocessed neural epochs and matched behavioural trials from `data/05_LMM`. It creates `analysis/.cache/derived/05_LMM/features` and writes one regional CSV containing mean amplitude, four band powers and four ITPC values, together with participant, condition and trial identifiers. `windows_used.csv` records the extraction windows. These are generated feature outputs used by `03_models.Rmd` and the participant-level ITPC section of `07_robustness.Rmd`. To regenerate them from the repository root, run `python analysis/05_LMM/01_features.py`.
+
 Feature windows are read from the functional-regression coefficient tables. Trials are matched by participant, condition and trial identifier. The nine neural predictors are z-scored separately within each condition after matching; behavioural responses remain in milliseconds. Models use maximum likelihood and a participant random intercept.
 
 All retained regions are first fitted in the voluntary condition. Regions with at least one neural predictor having p < 0.05 are then fitted in the involuntary condition using the same nine predictors. Coefficient p-values are two-sided.
@@ -67,14 +69,14 @@ The analysis uses patient 2, channel `chan83-chan84`, and patient 4, channel `ch
 
 ## Supplementary robustness analyses
 
-[`07_supplementary_robustness/07_robustness.R`](07_supplementary_robustness/07_robustness.R) runs both supplementary analyses with base R. Run `Rscript --vanilla analysis/run.R robustness`, or open the script in RStudio and click Source.
+[`07_supplementary_robustness/07_robustness.Rmd`](07_supplementary_robustness/07_robustness.Rmd) has two sections: **Bayesian behavioural analysis** and **Participant-level ITPC bootstrap**. Each section has its own data-reading, analysis and result-saving chunks and can run without executing the other section. Run `Rscript analysis/run.R robustness`, or execute the report chunks in RStudio. The corresponding helper files are `lib/bayesian_functions.R` and `lib/itpc_functions.R`. All CSV paths and `read.csv()` calls are shown directly in the corresponding report sections; helpers contain the preparation and statistical functions.
 
-The behavioural component uses default JZS Bayesian one-sample and paired t tests with Cauchy scale sqrt(2)/2. The paired comparison uses the voluntary-minus-involuntary outcome shift. The ITPC component fits separate participant-level regressions with intercepts in each condition and compares their slopes using 20,000 paired participant bootstrap draws. ITPC remains on its original scale and behaviour remains in milliseconds; 95% intervals use the percentile method.
+The analysis reads the original participant behavioural summary and the existing `analysis/.cache/derived/05_LMM/features` tables. Participant identifiers and sample size are taken from the input tables. JZS Bayesian t tests use Cauchy scale sqrt(2)/2. The paired outcome comparison uses voluntary minus involuntary. Each participant-level ITPC regression includes an intercept; ITPC remains on its original scale and behaviour remains in milliseconds.
 
-The original behavioural summary and supplied compact ITPC table are sufficient for this step. The optional `prepare_inputs.py` recovers the compact ITPC values from the existing MEG feature tables and regenerates the saved PCG64 bootstrap draws (seed 20261109); its NumPy requirement is listed in the module. See [the module README](07_supplementary_robustness/README.md) for details.
+The bootstrap retains both conditions together in each of 20,000 participant draws and uses percentile 95% intervals. `lib/bootstrap_draws.py` generates the original PCG64 sequence (seed 20261109), so no saved index table is needed. It requires NumPy as listed in `requirements.txt`. Python is read from `DUAL_AGENCY_PYTHON`, or from `python` on PATH. The module saves only `bayesian_t_tests.csv` and `itpc_bootstrap.csv`.
 
 ## Input preparation and execution
 
 MEG and behavioural inputs already contain the corresponding participant-specific baseline correction. Each behavioural trial has the participant's baseline-condition average subtracted. Each MEG trial has the participant's baseline-condition mean waveform subtracted at the same region and time point before feature extraction. Voluntary action uses `ba`, involuntary movement uses `bi`, and both outcome conditions use `bs`. Functional-regression and network contrasts are voluntary minus involuntary after baseline correction. See [the data documentation](../data/README.md) for the condition codes.
 
-The R runner executes the report chunks and saves tables and figures. For the R Markdown modules, append `--html` to render an HTML report with Pandoc. The `robustness` step directly saves CSV tables and a Markdown summary. The project root is identified by `dual-agency-pathways.Rproj`; `DUAL_AGENCY_ROOT` can specify it explicitly. `DUAL_AGENCY_R_LIBRARY` can point to an existing R package library.
+The R runner executes the report chunks and saves tables and figures. Append `--html` to render an HTML report with Pandoc. The project root is identified by `dual-agency-pathways.Rproj`; `DUAL_AGENCY_ROOT` can specify it explicitly. `DUAL_AGENCY_R_LIBRARY` can point to an existing R package library.

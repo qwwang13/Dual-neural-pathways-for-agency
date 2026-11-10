@@ -1,2 +1,2 @@
-# Needed only to recreate participant inputs and bootstrap indices.
+# Used to generate the original paired PCG64 bootstrap draws.
 numpy==2.3.5

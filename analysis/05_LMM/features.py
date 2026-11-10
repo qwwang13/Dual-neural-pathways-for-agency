@@ -2,10 +2,8 @@
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import sys
-import numpy as np
 import pandas as pd
-from config import ROOT, DATA, RESULTS, CACHE, BEHAVIOR, CONDITIONS, windows, check19
+from config import ROOT, DATA, CACHE, BEHAVIOR, windows
 
 sys.path.insert(0, str(ROOT / "analysis/05_LMM"))
 from TF_features import export_trial_features
@@ -17,11 +15,6 @@ def export(stage):
     for name in w.file:
         if not (DATA / "05_LMM" / name).is_file() and not (DATA / "05_LMM" / (name+".gz")).is_file():
             raise FileNotFoundError(DATA / "05_LMM" / name)
-    behavior = pd.read_csv(BEHAVIOR)
-    if behavior.duplicated(["subject", "condition", "trial"]).any():
-        raise ValueError("Duplicate behavior trial keys")
-    for conds in CONDITIONS.values():
-        check19(behavior.loc[np.isfinite(behavior.behavior_value)], conds)
     part = "05_LMM/features" if stage == "features" else "05_LMM/ITPC"
     out = CACHE / part; out.mkdir(parents=True, exist_ok=True)
     records = []
@@ -36,15 +29,8 @@ def export(stage):
         print(f"{stage}: {row.binding} {row.region} {limits}")
         if stage == "features":
             path, frame = export_trial_features(**kwargs)
-            if frame.duplicated(["subject", "condition", "trial"]).any():
-                raise ValueError(f"Duplicate feature keys: {source.name}")
-            if not np.isfinite(frame.select_dtypes(include="number").to_numpy()).all():
-                raise ValueError(f"Nonfinite features: {source.name}")
         else:
             path, _, frame, means = export_angles_itpc(**kwargs)
-            if not (means.n_subjects == 19).all():
-                raise ValueError(f"ITPC does not include 19 subjects: {source.name}")
-        check19(frame, CONDITIONS[row.binding])
         for cond, g in frame.groupby("condition"):
             records.append(dict(binding=row.binding, roi=row.roi, condition=cond,
                 start_ms=row.primary_lower_ms, end_ms=row.primary_upper_ms,

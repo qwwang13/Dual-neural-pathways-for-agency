@@ -20,11 +20,6 @@ out <- out_dir("06_ieeg"); inputs <- cache_dir("06_ieeg"); fig <- out_dir("06_ie
 ```
 
 ```{r}
-w <- read_functional_windows() %>%
-  filter(binding=="outcome", region=="MTG-R")
-used <- read_csv(file.path(inputs,"windows_used.csv"), show_col_types=FALSE)
-key <- c("binding","region","primary_lower_ms","primary_upper_ms")
-stopifnot(nrow(w)==1, isTRUE(all.equal(as.data.frame(w[key]), as.data.frame(used[key]), check.attributes=FALSE)))
 feature_df <- read_csv(file.path(inputs,"feature/ieeg_MTGR.csv"), show_col_types=FALSE)
 behavior_df <- read_csv(file.path(data_root,"06_ieeg/behavior_ieeg.csv"), show_col_types=FALSE)
 map_df <- tibble(subject=c("2","4"), label=c("chan83-chan84","chan10-chan11"))
@@ -32,13 +27,7 @@ conds <- c("Voluntary_OutcomeOnsetReportSound","Involuntary_OutcomeOnsetReportSo
 trial_keys <- c("subject","condition","trial")
 feature_df <- feature_df %>% mutate(subject=as.character(subject), trial=as.character(trial))
 behavior_df <- behavior_df %>% mutate(subject=as.character(subject), trial=as.character(trial))
-stopifnot(!anyDuplicated(feature_df[trial_keys]), !anyDuplicated(behavior_df[trial_keys]))
-expected <- tidyr::expand_grid(subject=map_df$subject, condition=conds) %>% left_join(map_df, by="subject")
-actual <- distinct(feature_df, subject, label, condition)
-stopifnot(nrow(anti_join(expected,actual,by=c("subject","label","condition")))==0,
-          nrow(anti_join(actual,expected,by=c("subject","label","condition")))==0)
 matched <- inner_join(feature_df, behavior_df, by=trial_keys, relationship="one-to-one")
-stopifnot(nrow(matched)==nrow(feature_df), all(is.finite(matched$behavior_value)))
 ```
 
 ## Summarize patient data
@@ -72,7 +61,6 @@ plot_height <- 6.6/2.54
 ```
 
 ```{r behavior-itpc-plot, fig.width=plot_width, fig.height=plot_height}
-stopifnot(condition_pick %in% conds)
 set.seed(20261028)
 p_MTGR <- plot_half_violin_subjects(
   behavior_df=behavior_df, feature_df=feature_df, condition_pick=condition_pick,

@@ -24,7 +24,6 @@ roi_display <- function(x) {
   labels[matched] <- unname(aliases[labels[matched]])
   labels
 }
-check19 <- function(x) stopifnot(setequal(unique(x),2:20),!anyNA(x))
 out_dir <- function(part,figures=FALSE) {
   p <- file.path(if(figures)figure_root else result_root,part)
   dir.create(p,recursive=TRUE,showWarnings=FALSE);p

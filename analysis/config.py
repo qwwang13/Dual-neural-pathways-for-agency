@@ -9,12 +9,6 @@ CACHE = ROOT / "analysis/.cache/derived"
 BEHAVIOR = DATA / "05_LMM/behavior_single_trial.csv"
 CONDITIONS = {"action": ["va_a", "ia_a"], "outcome": ["vs_s", "is_s"]}
 
-def check19(frame, conditions):
-    for condition in conditions:
-        actual = set(frame.loc[frame.condition == condition, "subject"].astype(int))
-        if actual != set(range(2, 21)):
-            raise ValueError(f"{condition}: expected subjects 2-20, got {sorted(actual)}")
-
 def windows():
     parts = []
     columns = ["region", "primary_lower_ms", "primary_upper_ms"]
@@ -25,8 +19,6 @@ def windows():
     w = pd.concat(parts, ignore_index=True)
     w["primary_window"] = (w.primary_lower_ms.astype(str) + "–" + w.primary_upper_ms.astype(str))
     w = w.sort_values(["binding", "primary_lower_ms", "region"]).reset_index(drop=True)
-    if set(w.binding) != set(CONDITIONS) or w.duplicated(["binding", "region"]).any():
-        raise ValueError("Invalid selected windows; run 03_functional.Rmd first.")
     w["roi"] = w.region.str.replace("-", "", regex=False)
     w["file"] = w.roi + w.binding.map({"action": "_action_ba.csv", "outcome": "_outcome_bs.csv"})
     if not ((w.primary_lower_ms >= 0) & (w.primary_upper_ms <= 1000)

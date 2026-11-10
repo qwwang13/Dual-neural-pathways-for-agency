@@ -13,6 +13,7 @@ The analyses follow the progression from behavioural temporal binding to regiona
 ```text
 dual-agency-pathways/
 ├── analysis/
+│   ├── .cache/derived/
 │   ├── 01_temporal_binding_effect/
 │   ├── 02_meg_results/
 │   ├── 03_functional_regression/
@@ -32,7 +33,7 @@ dual-agency-pathways/
 └── README.md
 ```
 
-The numbered modules identify the same analyses across the repository. Each module contains its workflow scripts and helper functions. `data/` holds the analysis inputs, `results/` holds the final numerical tables, and `figures/` holds the combined PDF figures. Intermediate features, phase angles and network matrices are stored in `analysis/.cache/derived`.
+The numbered modules identify the same analyses across the repository. Each module contains its workflow scripts and helper functions. `data/` holds the analysis inputs, `results/` holds the final numerical tables, and `figures/` holds the combined PDF figures. Generated feature tables, phase angles and network matrices are stored in `analysis/.cache/derived`. This is the repository's intermediate-output directory. For example, `analysis/05_LMM/01_features.py` reads the preprocessed epochs in `data/05_LMM` and saves the nine neural features to `analysis/.cache/derived/05_LMM/features`. The LMMs and supplementary ITPC analysis read those same feature tables. Supplied copies are included and can be regenerated from the existing inputs; see [the feature-data explanation](data/README.md#derived-meg-feature-tables).
 
 ## Analytical modules
 
@@ -94,7 +95,7 @@ The original Brainstorm permutation export is available as [`a01_permutation_tes
 
 ### Supplementary robustness analyses
 
-Run `Rscript --vanilla analysis/run.R robustness` to reproduce the JZS Bayesian t tests and the participant-level ITPC slope comparisons. This step needs only base R and the supplied inputs. It reuses the original behavioural participant summary, fits each ITPC regression with an intercept, and retains both conditions together in 20,000 participant bootstrap draws. Results are saved in `results/07_supplementary_robustness/`, including a three-decimal summary. See [the supplementary module](analysis/07_supplementary_robustness/README.md) for the inputs, settings and optional input-preparation script.
+Run `Rscript analysis/run.R robustness` for the Bayesian behavioural tests and participant-level ITPC bootstrap. The R Markdown file has two separate sections: Bayesian behavioural analysis and Participant-level ITPC bootstrap. Each section reads its inputs, runs its own analysis and saves its own result table. It reads the original behavioural summary and existing MEG feature tables, and saves two final CSV tables. Python with NumPy generates the paired bootstrap draws from the original fixed seed. See [analysis/README.md](analysis/README.md#supplementary-robustness-analyses) for settings and dependencies.
 
 ### Redrawing supplied results
 

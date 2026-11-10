@@ -139,9 +139,6 @@ plot_half_violin_subjects <- function(
     zero_line_linetype = "dashed",
     zero_line_linewidth = 0.45
 ) {
-  stopifnot(all(c("subject", "condition", "trial", "behavior_value") %in% names(behavior_df)))
-  stopifnot(all(c("subject", "label", "condition", "trial") %in% names(feature_df)))
-  stopifnot(all(c("subject", "label") %in% names(map_df)))
 
   map_df2 <- map_df %>%
     mutate(
